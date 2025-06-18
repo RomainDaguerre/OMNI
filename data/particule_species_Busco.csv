@@ -1,0 +1,126 @@
+Organism,Previous_file,Particule,Type,File,BUSCO_score
+Alphamonas edax,Alphamonas_edax_archived.fasta,Aedax,transcriptome,alphamonas_edax.fasta,34.5
+Ancora sagittata,Ancora_sagittata_archived.fasta,Asagi,transcriptome,ancora_sagittata.fasta,66.3
+Babesia bigemina,PiroplasmaDB-68_BbigeminaBOND_AnnotatedProteins.fasta,Bbige,genome,babesia_bigemina.fasta,98.8
+Babesia bovis,PiroplasmaDB-68_BbovisT2Bo_AnnotatedProteins.fasta,Bbovi,genome,babesia_bovis.fasta,99.4
+Babesia caballi,PiroplasmaDB-68_BcaballiUSDA-D6B2_AnnotatedProteins.fasta,Bcaba,genome,babesia_caballi.fasta,90.0
+Babesia divergens,PiroplasmaDB-68_Bdivergens1802A_AnnotatedProteins.fasta,Bdive,genome,babesia_divergens.fasta,98.3
+Babesia duncani,PiroplasmaDB-68_BduncaniWA12023_AnnotatedProteins.fasta,Bdunc,genome,babesia_duncani.fasta,86.1
+Babesia microti,PiroplasmaDB-68_BmicrotiRI_AnnotatedProteins.fasta,Bmicr,genome,babesia_microti.fasta,97.3
+Babesia ovata,PiroplasmaDB-68_BovataMiyake_AnnotatedProteins.fasta,Bovat,genome,babesia_ovata.fasta,93.1
+Babesia ovis,PiroplasmaDB-68_BovisSelcuk_AnnotatedProteins.fasta,Bovis,genome,babesia_ovis.fasta,96.0
+Babesia sp Xinjiang Xinjiang,PiroplasmaDB-68_BspXinjiang_AnnotatedProteins.fasta,BspXi,genome,babesia_sp_xinjiang_xinjiang.fasta,89.0
+Besnoitia besnoiti,ToxoDB-68_BbesnoitiBbGer1_AnnotatedProteins.fasta,Bbesn,genome,besnoitia_besnoiti.fasta,99.6
+Blabericola migrator1,Blabericola_migrator_1_archived.fasta,Bmig1,transcriptome,blabericola_migrator1.fasta,76.3
+Blabericola migrator2,Blabericola_migrator_2_archived.fasta,Bmig2,transcriptome,blabericola_migrator2.fasta,79.8
+Cephaloidophora cf communis,Cephaloidophora_communis_archived.fasta,Ccomm,transcriptome,cephaloidophora_cf_communis.fasta,66.9
+Chromera velia,CryptoDB-68_CveliaCCMP2878_AnnotatedProteins.fasta,Cveli,genome,chromera_velia.fasta,87.7
+Colpodella angusta 1,Colpodella_angusta_1_archived.fasta,Cang1,transcriptome,colpodella_angusta_1.fasta,76.1
+Colpodella angusta 2,Colpodella_angusta_2_archived.fasta,Cang2,transcriptome,colpodella_angusta_2.fasta,63.2
+Cryptosporidium andersoni,CryptoDB-68_Candersoni30847_AnnotatedProteins.fasta,Cande,genome,cryptosporidium_andersoni.fasta,99.0
+Cryptosporidium baileyi,CryptoDB-46_CbaileyiTAMU-09Q1_ORFs_AA_archived.fasta,Cbail,transcriptome,cryptosporidium_baileyi.fasta,91.5
+Cryptosporidium bovis,CryptoDB-68_Cbovis45015_AnnotatedProteins.fasta,Cbovi,genome,cryptosporidium_bovis.fasta,97.3
+Cryptosporidium sp chipmunk,CryptoDB-68_Cspchipmunk37763_AnnotatedProteins.fasta,Cchip,genome,cryptosporidium_sp_chipmunk.fasta,97.7
+Cryptosporidium hominis,CryptoDB-68_ChominisTU502_2012_AnnotatedProteins.fasta,Chomi,genome,cryptosporidium_hominis.fasta,98.8
+Cryptosporidium meleagridis,CryptoDB-68_CmeleagridisUKMEL1_AnnotatedProteins.fasta,Cmele,genome,cryptosporidium_meleagridis.fasta,99.2
+Cryptosporidium muris,CryptoDB-68_CmurisRN66_AnnotatedProteins.fasta,Cmuri,genome,cryptosporidium_muris.fasta,99.0
+Cryptosporidium parvum,CryptoDB-68_CparvumIowaII_AnnotatedProteins.fasta,Cparv,genome,cryptosporidium_parvum.fasta,96.7
+Cryptosporidium ryanae,CryptoDB-68_Cryanae45019_AnnotatedProteins.fasta,Cryan,genome,cryptosporidium_ryanae.fasta,95.8
+Cryptosporidium tyzzeri,CryptoDB-68_CtyzzeriUGA55_AnnotatedProteins.fasta,Ctyzz,genome,cryptosporidium_tyzzeri.fasta,96.3
+Cryptosporidium ubiquitum,CryptoDB-68_Cubiquitum39726_AnnotatedProteins.fasta,Cubiq,genome,cryptosporidium_ubiquitum.fasta,98.8
+Cyclospora cayetanensis,ToxoDB-68_CcayetanensisNF1_C8_AnnotatedProteins.fasta,Ccaye,genome,cyclospora_cayetanensis.fasta,93.3
+Cystoisospora suis,ToxoDB-68_CsuisWienI_AnnotatedProteins.fasta,Csui,genome,cystoisospora_suis.fasta,77.8
+Cytauxzoon felis,PiroplasmaDB-68_CfelisWinnie_AnnotatedProteins.fasta,Cfeli,genome,cytauxzoon_felis.fasta,93.3
+Devanium cincinnus,Devanium_cincinnus_Ph216_spades_transcripts.fasta,Devac,transcriptome,devanium_cincinnus.fasta,6.7
+Devanium robustum,Devanium_robustum_SelFal-co_spades_transcripts.fasta,Devar,transcriptome,devanium_robustum.fasta,23.9
+Digyalum oweni 1,Digyalum_WS1_archived.fasta,Dowe1,transcriptome,digyalum_oweni_1.fasta,78.8
+Digyalum oweni 2,Digyalum_WS2_archived.fasta,Dowe2,transcriptome,digyalum_oweni_2.fasta,73.8
+Diplauxis hatti,PersoDB_Diplauxis_hatti.fasta,Dhatt,genome,diplauxis_hatti.fasta,61.7
+Eimeria acervulina,ToxoDB-68_EacervulinaHoughton_AnnotatedProteins.fasta,Eacer,genome,eimeria_acervulina.fasta,73.2
+Eimeria brunetti,ToxoDB-68_EbrunettiHoughton_AnnotatedProteins.fasta,Ebrun,genome,eimeria_brunetti.fasta,58.0
+Eimeria falciformis,ToxoDB-68_EfalciformisBayerHaberkorn1970_AnnotatedProteins.fasta,Efalc,genome,eimeria_falciformis.fasta,82.1
+Eimeria maxima,ToxoDB-68_EmaximaWeybridge_AnnotatedProteins.fasta,Emaxi,genome,eimeria_maxima.fasta,55.5
+Eimeria mitis,ToxoDB-68_EmitisHoughton_AnnotatedProteins.fasta,Emiti,genome,eimeria_mitis.fasta,40.1
+Eimeria necatrix,ToxoDB-68_EnecatrixHoughton_AnnotatedProteins.fasta,Eneca,genome,eimeria_necatrix.fasta,73.2
+Eimeria praecox,ToxoDB-68_EpraecoxHoughton_AnnotatedProteins.fasta,Eprae,genome,eimeria_praecox.fasta,39.1
+Eimeria tenella,ToxoDB-68_EtenellaHoughton2021_AnnotatedProteins.fasta,Etene,genome,eimeria_tenella.fasta,99.0
+Eleutheroschizon duboscqi,Eleutheroschizon_duboscqi_archived.fasta,Edubo,transcriptome,eleutheroschizon_duboscqi.fasta,2.5
+Filipodium phascolosomae,Filipodium_phascolosomae.fasta,Fipha,transcriptome,filipodium_phascolosomae.fasta,12.3
+Gregarina niphandrodes,CryptoDB-68_GniphandrodesUnknown_AnnotatedProteins.fasta,Gniph,genome,gregarina_niphandrodes.fasta,80.0
+Gregarina sp poly 29,Gregarina_sp_Poly29_archived.fasta,Gpo29,transcriptome,gregarina_sp_poly_29.fasta,33.9
+Gregarina sp poly1,Gregarina_sp_Poly1_archived.fasta,Gpo01,transcriptome,gregarina_sp_poly1.fasta,74.6
+Gregarina sp poly39,Gregarina_sp_Poly39_archived.fasta,Gpo39,transcriptome,gregarina_sp_poly39.fasta,16.4
+Gregarina sp pseudo7,Gregarina_sp_Pseudo7_archived.fasta,Gpse7,transcriptome,gregarina_sp_pseudo7.fasta,48.4
+Gregarina sp pseudo8,Gregarina_sp_Pseudo8_archived.fasta,Gpse8,transcriptome,gregarina_sp_pseudo8.fasta,8.9
+Gregarina sp pseudo9,Gregarina_sp_Pseudo9_archived.fasta,Gpse9,transcriptome,gregarina_sp_pseudo9.fasta,62.8
+Haemoproteus tartakovskyi,PlasmoDB-68_HtartakovskyiSISKIN1_AnnotatedProteins.fasta,Htart,genome,haemoproteus_tartakovskyi.fasta,67.2
+Hammondia hammondi,ToxoDB-68_HhammondiHH34_AnnotatedProteins.fasta,Hhamm,genome,hammondia_hammondi.fasta,99.2
+Heliospora caprellae,Heliospora_caprellae_archived.fasta,Hcapr,transcriptome,heliospora_caprellae.fasta,62.2
+Hepatocystis sp,PlasmoDB-68_Hpiliocolobus2019_AnnotatedProteins.fasta,Hepat,genome,hepatocystis_sp.fasta,92.9
+Lankesteria abbotti,Lankesteria_abbotti_archived.fasta,Labbo,transcriptome,lankesteria_abbotti.fasta,44.9
+Lankesteria metandrocarpae,Lankesteria_metandrocarpae.fasta,Lmeta,transcriptome,lankesteria_metandrocarpae.fasta,28.3
+Lecudina tuzetae,Lecudina_tuzetae_archived.fasta,Ltuze,transcriptome,lecudina_tuzetae.fasta,46.8
+Lunidium laculatum,Lunidium_laculatum_SelCur-SNEK_spades_transcripts.fasta,Lulac,transcriptome,lunidium_laculatum.fasta,47.2
+Lunidium melongena,Lunidium_melongena_SelMelR-co.fasta,Lumel,transcriptome,lunidium_melongena.fasta,29.9
+Lunidium proboscidis,Lunidium_proboscidis_SelCur-SNEKDIV2023_spades_transcripts.fasta,Lupro,transcriptome,lunidium_proboscidis.fasta,32.2
+Lunidium shako,Lunidium_shako_SelCur-KNOB2023_spades_transcripts.fasta,Lusha,transcriptome,lunidium_shako.fasta,45.7
+Metzidium perlucensae,Metzidium_perlucensae_SQU2901_spades_transcripts.fasta,Metzi,transcriptome,metzidium_perlucensae.fasta,44.1
+Monocystis agilis,Monocystis_agilis_archived.fasta,Magil,transcriptome,monocystis_agilis.fasta,72.3
+Neospora caninum,ToxoDB-68_NcaninumLIV_AnnotatedProteins.fasta,Ncani,genome,neospora_caninum.fasta,98.5
+Nephromyces occidentalis,Nephromyces_occidentalis_archived.fasta,Nocci,transcriptome,nephromyces_occidentalis.fasta,95.2
+Ophryocystis elektroscirrha,PersoDB_Ophryocystis_elektroscirrha.fasta,Oelek,genome,ophryocystis_elektroscirrha.fasta,79.8
+Piridium sociabile,Piridium_archived.fasta,Psoci,transcriptome,piridium_sociabile.fasta,69.6
+Plasmodium adleri,PlasmoDB-68_PadleriG01_AnnotatedProteins.fasta,Padle,genome,plasmodium_adleri.fasta,99.6
+Plasmodium berghei,PlasmoDB-68_PbergheiANKA_AnnotatedProteins.fasta,Pberg,genome,plasmodium_berghei.fasta,99.8
+Plasmodium billcollinsi,PlasmoDB-68_PbillcollinsiG01_AnnotatedProteins.fasta,Pbill,genome,plasmodium_billcollinsi.fasta,96.7
+Plasmodium blacklocki,PlasmoDB-68_PblacklockiG01_AnnotatedProteins.fasta,Pblac,genome,plasmodium_blacklocki.fasta,98.8
+Plasmodium brasilianum,PlasmoDB-68_PbrasilianumBolivianI_AnnotatedProteins.fasta,Pbras,genome,plasmodium_brasilianum.fasta,97.7
+Plasmodium chabaudi chabaudi,PlasmoDB-68_Pchabaudichabaudi_AnnotatedProteins.fasta,Pchab,genome,plasmodium_chabaudi_chabaudi.fasta,100.0
+Plasmodium coatneyi,PlasmoDB-68_PcoatneyiHackeri_AnnotatedProteins.fasta,Pcoat,genome,plasmodium_coatneyi.fasta,98.8
+Plasmodium cynomolgi,PlasmoDB-68_PcynomolgiM_AnnotatedProteins.fasta,Pcyno,genome,plasmodium_cynomolgi.fasta,100.0
+Plasmodium falciparum,PlasmoDB-68_Pfalciparum3D7_AnnotatedProteins.fasta,Pfalc,genome,plasmodium_falciparum.fasta,99.6
+Plasmodium fragile,PlasmoDB-68_PfragileNilgiri_AnnotatedProteins.fasta,Pfrag,genome,plasmodium_fragile.fasta,98.8
+Plasmodium gaboni,PlasmoDB-68_PgaboniSY75_AnnotatedProteins.fasta,Pgabo,genome,plasmodium_gaboni.fasta,95.8
+Plasmodium gallinaceum,PlasmoDB-68_Pgallinaceum8A_AnnotatedProteins.fasta,Pgall,genome,plasmodium_gallinaceum.fasta,99.6
+Plasmodium inui,PlasmoDB-68_PinuiSanAntonio1_AnnotatedProteins.fasta,Pinui,genome,plasmodium_inui.fasta,99.0
+Plasmodium knowlesi,PlasmoDB-68_PknowlesiH_AnnotatedProteins.fasta,Pknol,genome,plasmodium_knowlesi.fasta,100.0
+Plasmodium malariae,PlasmoDB-68_PmalariaeUG01_AnnotatedProteins.fasta,Pmala,genome,plasmodium_malariae.fasta,99.8
+Plasmodium ovale,PlasmoDB-68_PovalecurtisiGH01_AnnotatedProteins.fasta,Poval,genome,plasmodium_ovale.fasta,99.6
+Plasmodium praefalciparum,PlasmoDB-68_PpraefalciparumG01_AnnotatedProteins.fasta,Pprae,genome,plasmodium_praefalciparum.fasta,99.0
+Plasmodium reichenowi,PlasmoDB-68_PreichenowiG01_AnnotatedProteins.fasta,Preic,genome,plasmodium_reichenowi.fasta,99.6
+Plasmodium relictum,PlasmoDB-68_PrelictumSGS1-like_AnnotatedProteins.fasta,Preli,genome,plasmodium_relictum.fasta,99.6
+Plasmodium vinckei vinckei,PlasmoDB-68_Pvinckeivinckeivinckei_AnnotatedProteins.fasta,Pvinc,genome,plasmodium_vinckei_vinckei.fasta,99.6
+Plasmodium vivax,PlasmoDB-68_PvivaxPAM_AnnotatedProteins.fasta,Pviva,genome,plasmodium_vivax.fasta,99.6
+Plasmodium yoelii yoelii,PlasmoDB-68_Pyoeliiyoelii17X_AnnotatedProteins.fasta,Pyoel,genome,plasmodium_yoelii_yoelii.fasta,99.8
+Platyproteum sp,Platyproteum_sp_archived.fasta,Plats,transcriptome,platyproteum_sp.fasta,49.3
+Platyproteum vivax,Platyproteum_vivax.fasta,Platv,transcriptome,platyproteum_vivax.fasta,23.3
+Polyplicarium translucidae,Polyplicarium_translucidae.fasta,Polyp,transcriptome,polyplicarium_translucidae.fasta,27.2
+Polyrhabdina sp,Polyrhabdina_sp_archived.fasta,Porha,transcriptome,polyrhabdina_sp.fasta,80.9
+Porospora cf gigantea A,CryptoDB-68_PgiganteaA_AnnotatedProteins.fasta,PoroA,genome,porospora_cf_gigantea_a.fasta,85.0
+Porospora cf gigantea B,CryptoDB-68_PgiganteaB_AnnotatedProteins.fasta,PoroB,genome,porospora_cf_gigantea_b.fasta,83.0
+Protomagalhaensia sp Gyna25,Protomagalhaensia_sp_Gyna25_archived.fasta,PGy25,transcriptome,protomagalhaensia_sp_gyna25.fasta,63.0
+Protomagalhaensia sp Gyna26,Protomagalhaensia_sp_Gyna26_archived.fasta,PGy26,transcriptome,protomagalhaensia_sp_gyna26.fasta,60.3
+Protomagalhaensia sp Gyna27,Protomagalhaensia_sp_Gyna27_archived.fasta,PGn27,transcriptome,protomagalhaensia_sp_gyna27.fasta,2.1
+Protomagalhaensia wolfi nauph75,Protomagalhaensia_wolfi_75_archived.fasta,Pwo75,transcriptome,protomagalhaensia_wolfi_nauph75.fasta,5.4
+Protomagalhaensia wolfi nauph77,Protomagalhaensia_wolfi_77_archived.fasta,Pwo77,transcriptome,protomagalhaensia_wolfi_nauph77.fasta,5.4
+Protomagalhaensia wolfi nauph80,Protomagalhaensia_wolfi_80_archived.fasta,Pwo80,transcriptome,protomagalhaensia_wolfi_nauph80.fasta,52.4
+Pterospora schizosoma,Pterospora_schizosoma_archived.fasta,Pschi,transcriptome,pterospora_schizosoma.fasta,58.2
+Rhytidocystis sp 1,Rhytidocystis_sp_archived.fasta,Rhyt1,transcriptome,rhytidocystis_sp_1.fasta,57.8
+Rhytidocystis sp 2,Rhytidocystis_sp2_archived.fasta,Rhyt2,transcriptome,rhytidocystis_sp_2.fasta,62.4
+Sarcocystis neurona,ToxoDB-68_SneuronaSN3_AnnotatedProteins.fasta,Sneur,genome,sarcocystis_neurona.fasta,86.1
+Selenidium capillus,Selenidium_capillus_Ph213_spades_transcripts.fasta,Secap,transcriptome,selenidium_capillus.fasta,48.4
+Selenidium natalis,Selenidium_natalis_SEL2980_spades_transcripts.fasta,Senat,transcriptome,selenidium_natalis.fasta,50.7
+Selenidium pherusae,Selenidium_pherusae_Ph226_spades_transcripts.fasta,Sephe,transcriptome,selenidium_pherusae.fasta,62.2
+Selenidium pygospionis,Selenidium_pygospionis_archived.fasta,Sepyg,transcriptome,selenidium_pygospionis.fasta,78.0
+Selenidium serpulae,Selenidium_serpulae.fasta,Seser,transcriptome,selenidium_serpulae.fasta,22.5
+Selenidium validusae,Selenidium_validusae_WK.fasta,Seval,transcriptome,selenidium_validusae.fasta,81.5
+Siedleckia leitoscoloplosi,Siedleckia_leitoscoloplosis_BL3_spades_transcripts.fasta,SiedL,transcriptome,siedleckia_leitoscoloplosi.fasta,36.4
+Siedleckia nematoides,Siedleckia_nematoides_archived.fasta,SiedN,transcriptome,siedleckia_nematoides.fasta,58.4
+Symbiont X,Symbiont_X_archived.fasta,SymbX,transcriptome,symbiont_x.fasta,55.1
+Theileria annulata,PiroplasmaDB-68_TannulataAnkara_AnnotatedProteins.fasta,Tannu,genome,theileria_annulata.fasta,97.3
+Theileria equi,PiroplasmaDB-68_TequiWA_AnnotatedProteins.fasta,Tequi,genome,theileria_equi.fasta,96.9
+Theileria orientalis,PiroplasmaDB-68_TorientalisShintoku_AnnotatedProteins.fasta,Torie,genome,theileria_orientalis.fasta,97.3
+Theileria parva,PiroplasmaDB-68_TparvaMuguga_AnnotatedProteins.fasta,Tparv,genome,theileria_parva.fasta,97.7
+Toxoplasma gondii,ToxoDB-68_TgondiiME49_AnnotatedProteins.fasta,Tgond,genome,toxoplasma_gondii.fasta,99.8
+Trichotokara eunicae,Trichotokara_eunicae.fasta,Trich,transcriptome,trichotokara_eunicae.fasta,8.5
+Vitrella brassicaformis,CryptoDB-68_VbrassicaformisCCMP3155_AnnotatedProteins.fasta,Vbras,genome,vitrella_brassicaformis.fasta,94.4
