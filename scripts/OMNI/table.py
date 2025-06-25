@@ -1,3 +1,22 @@
+"""
+Protein Orthology Comparison Pipeline
+
+This script serves as a command-line interface for analyzing orthologous protein groups
+across species using precomputed FASTA and orthology inference data.
+
+Runs the `run_table()` function which performs:
+   - Merging and comparison of orthologous groups from multiple inference tools.
+   - Dynamic selection of the most compact reference group for species comparison.
+   - Evaluation of orthology consistency across tools.
+   - Optional integration of tree-based analyses.
+
+Dependencies:
+    - Python libraries.
+
+Author(s): Romain DAGUERRE
+"""
+
+
 import pandas as pd
 import os
 import csv
@@ -14,15 +33,36 @@ import subprocess
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 import numpy as np
-from matplotlib.patches import Wedge, Circle, Rectangle
-from matplotlib.collections import PatchCollection
+from matplotlib.patches import Wedge, Circle
 from PIL import Image
 from matplotlib.patches import Patch
 
 
 
 def fetch_sequence_ncbi_single(protein_id, protein_name, output_fasta, email="romain.daguerre1119@gmail.com"):
-    Entrez.email = email  # Obligatoire pour utiliser Entrez
+    """
+    Fetch a protein sequence from NCBI and save it in FASTA format.
+
+    This function:
+    - Uses the NCBI Entrez API to search for a protein using its ID.
+    - Retrieves the corresponding protein sequence in FASTA format.
+    - Cleans the FASTA to have a single-line sequence with a custom header.
+
+    Parameters
+    ----------
+    protein_id : str
+        Identifier of the protein to search in NCBI (e.g., UniProt or RefSeq ID).
+    
+    protein_name : str
+        Descriptive name of the protein (used for print messages).
+    
+    output_fasta : str
+        Path to the output FASTA file where the sequence will be saved.
+    
+    email : str, optional
+        Email address required by NCBI to use Entrez services (default is provided).
+    """
+    Entrez.email = email  # Mandatory for using ENTREZ
 
     os.makedirs(os.path.dirname(output_fasta), exist_ok=True)
 
@@ -41,7 +81,7 @@ def fetch_sequence_ncbi_single(protein_id, protein_name, output_fasta, email="ro
             fasta = fetch_handle.read()
             fetch_handle.close()
 
-            # Nettoyage : une seule ligne de séquence
+            # Cleaning
             lines = fasta.strip().split('\n')
             header = f">{protein_id}"
             sequence = "".join(lines[1:])
@@ -57,7 +97,24 @@ def fetch_sequence_ncbi_single(protein_id, protein_name, output_fasta, email="ro
 
 
 def read_protein_interest(file_path):
-    """Lit le fichier CSV contenant les protéines d'intérêt et retourne un dictionnaire {espece: {code_proteine: nom_proteine}}."""
+    """
+    Read a CSV file containing proteins of interest and return a nested dictionary.
+
+    This function:
+    - Reads a CSV file where each row contains a species name, a protein code, and a protein name.
+    - Organizes the data into a nested dictionary of the form {species: {protein_code: protein_name}}.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the CSV file containing protein information. The file must contain the columns:
+        'espece', 'code_proteine', and 'nom_proteine'.
+
+    Returns
+    -------
+    dict
+        A nested dictionary mapping species to protein codes and corresponding names.
+    """
     proteins = {}
     with open(file_path, 'r', newline='', encoding='utf-8') as f:
         reader = csv.DictReader(f, delimiter=',')
@@ -72,8 +129,25 @@ def read_protein_interest(file_path):
 
     return proteins
 
+
 def load_groups(orthogroup_file):
-    """Charge le fichier orthogroup et crée un dictionnaire des groupes."""
+    """
+    Load orthogroup data and return a dictionary mapping group IDs to sets of gene identifiers.
+
+    This function:
+    - Reads a CSV file where the first column contains BUSCO group IDs and the remaining columns contain gene lists per species.
+    - Returns a dictionary with group IDs as keys and sets of associated genes as values.
+
+    Parameters
+    ----------
+    orthogroup_file : str
+        Path to the CSV file containing orthogroup data.
+
+    Returns
+    -------
+    dict
+        A dictionary mapping group IDs to sets of gene identifiers (set of str).
+    """
     df = pd.read_csv(orthogroup_file, sep=',')
     orthogroup_dict = {}
     for _, row in df.iterrows():
@@ -87,8 +161,27 @@ def load_groups(orthogroup_file):
             orthogroup_dict[busco_group] = genes
     return orthogroup_dict
 
+
 def run_blastp(query_fasta, db_fasta, output_file):
-    """Exécute BLASTP pour comparer les séquences d'intérêt avec la base de données."""
+    """
+    Run BLASTP to compare protein sequences against a protein database.
+
+    This function:
+    - Creates a BLAST protein database from the provided FASTA file if it doesn't already exist.
+    - Executes a BLASTP search using the query sequences.
+    - Outputs the BLAST results in tabular format (outfmt 6).
+
+    Parameters
+    ----------
+    query_fasta : str
+        Path to the FASTA file containing the query protein sequences.
+
+    db_fasta : str
+        Path to the FASTA file to be used as the BLAST protein database.
+
+    output_file : str
+        Path to the output file where BLAST results will be written.
+    """
     db_name = db_fasta.replace(".fasta", "")
     
     if not os.path.exists(db_name + ".pin"):
@@ -97,47 +190,74 @@ def run_blastp(query_fasta, db_fasta, output_file):
     blastp_cline = NcbiblastpCommandline(query=query_fasta, db=db_name, outfmt=6, out=output_file)
     stdout, stderr = blastp_cline()
 
+
 def parse_blast_results(blast_output):
-    """Lit le fichier BLAST et extrait le meilleur hit et celui correspondant à l'ID d'intérêt."""
-    best_hits = {}  # Stocke le meilleur hit {query_id: (best_hit_id, score)}
+    """
+    Parse a BLAST output file and extract the best hit per query sequence.
+
+    This function:
+    - Reads a BLAST tabular output file (outfmt 6).
+    - For each query sequence, identifies the hit with the highest bit score.
+    - Returns a dictionary mapping each query ID to a tuple of (subject ID, bit score).
+
+    Parameters
+    ----------
+    blast_output : str
+        Path to the BLAST output file in tabular format.
+
+    Returns
+    -------
+    dict
+        A dictionary where keys are query sequence IDs and values are tuples
+        (best subject ID, best bit score).
+    """
+    best_hits = {}
 
     with open(blast_output, 'r') as f:
         for line in f:
             cols = line.strip().split("\t")
             if len(cols) < 12:
-                continue  # Éviter les lignes incomplètes
+                continue
 
             query_id, subject_id = cols[0], cols[1]
-            identity, alignment_length, mismatches, gap_opens = map(float, cols[2:6])
-            q_start, q_end, s_start, s_end = map(int, cols[6:10])
             evalue, bit_score = map(float, cols[10:12])
 
-            # Stocker le meilleur hit (le plus grand bit score)
+            # Store the best hit (highest bit score)
             if query_id not in best_hits or bit_score > best_hits[query_id][1]:
                 best_hits[query_id] = (subject_id, bit_score)
 
     return best_hits
 
+
 def parse_hits_in_orthogroups(ortholog_dict, results):
     """
-    Recherche le meilleur hit de chaque protéine dans les groupes orthologues.
+    Search for the best hit of each protein within ortholog groups.
 
-    Parameters:
-    - ortholog_dict : dict : Dictionnaire {group_id: [list of protein ids]}
-    - results : dict : Résultats du BLAST {nom_prot: {"best_hits": (hit, score)}}
+    Parameters
+    ----------
+    ortholog_dict : dict
+        Dictionary mapping group IDs to lists of protein IDs.
+    results : dict
+        BLAST results in the form {protein_name: {"best_hits": (hit, score)}}.
 
-    Returns:
-    - dict : {nom_prot: {"best_hit": ..., "score": ..., "ortholog_group": ...}}
+    Returns
+    -------
+    dict
+        Dictionary mapping each protein name to a dictionary containing:
+        - "best_hit": best hit protein ID,
+        - "score": bit score of the best hit,
+        - "ortholog_group": ID of the ortholog group where the best hit was found,
+          or None if not found.
     """
     ortholog_groups = {}
 
-    for nom_prot, data in results.items():
+    for protein_name, data in results.items():
         best_hit, score = data["best_hits"]
         found_group = False
 
         for group_id, members in ortholog_dict.items():
             if best_hit in members:
-                ortholog_groups[nom_prot] = {
+                ortholog_groups[protein_name] = {
                     "best_hit": best_hit,
                     "score": score,
                     "ortholog_group": group_id
@@ -146,7 +266,7 @@ def parse_hits_in_orthogroups(ortholog_dict, results):
                 break
 
         if not found_group:
-            ortholog_groups[nom_prot] = {
+            ortholog_groups[protein_name] = {
                 "best_hit": best_hit,
                 "score": score,
                 "ortholog_group": None
@@ -154,124 +274,145 @@ def parse_hits_in_orthogroups(ortholog_dict, results):
 
     return ortholog_groups
 
+
 def retrieve_orthologous_proteins(ortholog_dict, ortholog_groups):
     """
-    Fonction qui récupère les protéines de chaque groupe orthologue dans ortholog_dict.
+    Retrieve the proteins belonging to each ortholog group in ortholog_dict.
 
-    Parameters:
-    - ortholog_dict : dict : Dictionnaire contenant les groupes orthologues avec leurs protéines
-    - ortholog_groups : dict : Dictionnaire des résultats précédents contenant les groupes orthologues pour chaque best_hit
+    Parameters
+    ----------
+    ortholog_dict : dict
+        Dictionary containing ortholog groups with their associated proteins.
+    ortholog_groups : dict
+        Dictionary from previous results containing the ortholog group assigned to each best hit.
 
-    Returns:
-    - dict : Un dictionnaire avec les groupes orthologues et les protéines qui y appartiennent
+    Returns
+    -------
+    dict
+        A dictionary mapping each ortholog group to the proteins that belong to it.
     """
-    # Initialisation d'un dictionnaire pour stocker les résultats
     group_proteins = {}
 
-    # Parcours des groupes orthologues dans les résultats précédents
     for query_id, data in ortholog_groups.items():
         group_id = data["ortholog_group"]
 
         if group_id is not None:
-            # Si un groupe est trouvé, récupère toutes les protéines de ce groupe dans ortholog_dict
             if group_id in ortholog_dict:
                 group_proteins[group_id] = ortholog_dict[group_id]
             else:
-                # Si le groupe n'existe pas dans ortholog_dict, on assigne une valeur vide
+                # If the group does not exist in ortholog_dict, assign an empty list
                 group_proteins[group_id] = []
 
     return group_proteins
 
-def merge_orthologous_groups_by_protein(ortholog_orthologer, orthologs_orthologer_group, 
-                                        ortholog_orthofinder, orthologs_orthofinder_group):
+
+def merge_orthologous_groups_by_protein(method1_orthologs, method1_groups,
+                                        method2_orthologs, method2_groups):
     """
-    Fusionne les groupes d'orthologues pour chaque protéine requête en combinant les résultats d'Orthologer et d'OrthoFinder.
+    Merges orthologous groups for each query protein by combining results from two orthology methods.
 
     Parameters:
-    - ortholog_orthologer : dict : Groupes orthologues pour chaque protéine requête selon Orthologer
-    - orthologs_orthologer_group : dict : Protéines associées aux groupes d'Orthologer
-    - ortholog_orthofinder : dict : Groupes orthologues pour chaque protéine requête selon OrthoFinder
-    - orthologs_orthofinder_group : dict : Protéines associées aux groupes d'OrthoFinder
+    - method1_orthologs : dict : Orthologous group assignments per query protein from method 1
+    - method1_groups : dict : Proteins associated with each orthologous group from method 1
+    - method2_orthologs : dict : Orthologous group assignments per query protein from method 2
+    - method2_groups : dict : Proteins associated with each orthologous group from method 2
 
     Returns:
-    - dict : Dictionnaire fusionné où chaque protéine requête est associée aux protéines orthologues uniques des deux méthodes
+    - dict : Merged dictionary where each query protein is associated with the unique set of orthologs from both methods
     """
     merged_proteins = {}
 
-    for query_id in set(ortholog_orthologer.keys()).union(set(ortholog_orthofinder.keys())):
+    all_query_ids = set(method1_orthologs.keys()).union(set(method2_orthologs.keys()))
+
+    for query_id in all_query_ids:
         merged_proteins[query_id] = set()
 
-        # Ajout des protéines trouvées par Orthologer
-        if query_id in ortholog_orthologer:
-            group_id = ortholog_orthologer[query_id]["ortholog_group"]
-            if group_id in orthologs_orthologer_group:
-                merged_proteins[query_id].update(orthologs_orthologer_group[group_id])
+        # Add proteins from method 1
+        if query_id in method1_orthologs:
+            group_id = method1_orthologs[query_id]["ortholog_group"]
+            if group_id in method1_groups:
+                merged_proteins[query_id].update(method1_groups[group_id])
 
-        # Ajout des protéines trouvées par OrthoFinder
-        if query_id in ortholog_orthofinder:
-            group_id = ortholog_orthofinder[query_id]["ortholog_group"]
-            if group_id in orthologs_orthofinder_group:
-                merged_proteins[query_id].update(orthologs_orthofinder_group[group_id])
+        # Add proteins from method 2
+        if query_id in method2_orthologs:
+            group_id = method2_orthologs[query_id]["ortholog_group"]
+            if group_id in method2_groups:
+                merged_proteins[query_id].update(method2_groups[group_id])
 
-    # Convertir les sets en listes pour la sortie finale
     return {query_id: list(proteins) for query_id, proteins in merged_proteins.items()}
+
 
 def remove_duplicate_groups(merged_proteins_by_query):
     """
-    Supprime les groupes d'orthologues redondants ayant exactement les mêmes protéines.
+    Removes redundant orthologous groups that contain exactly the same proteins.
 
     Parameters:
-    - merged_proteins_by_query : dict : Dictionnaire où chaque protéine requête est associée à un ensemble de protéines orthologues
+    - merged_proteins_by_query : dict : Dictionary where each query protein is associated with a set of orthologous proteins
 
     Returns:
-    - dict : Dictionnaire sans groupes dupliqués (groupes identiques fusionnés)
+    - dict : Dictionary without duplicated groups
     """
     unique_groups = {}
     query_to_group = {}
 
     for query_id, proteins in merged_proteins_by_query.items():
-        # Convertir en set immuable (clé hashable) pour identifier les groupes identiques
         proteins_set = frozenset(proteins)
 
         if proteins_set not in unique_groups:
-            unique_groups[proteins_set] = query_id  # Associer cet ensemble à un ID de requête
+            unique_groups[proteins_set] = query_id
 
-        # Associer la requête à l'ID du groupe unique conservé
         query_to_group[query_id] = unique_groups[proteins_set]
 
-    # Recréer un dictionnaire final
     final_groups = {query_id: list(proteins) for proteins, query_id in unique_groups.items()}
 
     return final_groups
 
+
 def load_species_mapping(species_file):
     """
-    Charge le fichier CSV contenant les informations sur les espèces et crée un dictionnaire.
-    Le fichier CSV doit contenir les colonnes : Organism, File, Particule, BUSCO_score.
+    Loads a CSV file containing species information and creates a dictionary mapping particles to organism names.
+
+    The CSV file must contain the following columns: 'Organism', 'File', 'Particule', and 'BUSCO_score'.
+
+    Parameters
+    ----------
+    species_file : str
+        Path to the CSV file with species information.
+
+    Returns
+    -------
+    dict
+        Dictionary mapping 'Particule' values to corresponding 'Organism' names.
     """
-    # Charger le fichier CSV
     df = pd.read_csv(species_file)
-    
-    # Créer un dictionnaire avec le nom de l'organisme comme clé et le code 'Particule' comme valeur
     species_dict = pd.Series(df['Organism'].values, index=df['Particule']).to_dict()
 
     return species_dict
 
-def sonic_analysis(final_merged_groups, sonic_dict):
+
+def analyze_orthologous_groups(final_merged_groups, method_dict):
     """
-    Analyse les groupes Sonicparanoid en listant les protéines associées 
-    à chaque protéine requête et en affichant leur composition, y compris 
-    celles qui ne sont dans aucun groupe Sonicparanoid.
+    Analyzes orthologous groups from a specified method by listing the proteins 
+    associated with each query protein and showing their composition, 
+    including those not found in any group.
 
-    Parameters:
-    - final_merged_groups : dict : Dictionnaire des groupes fusionnés avec leurs protéines
-    - sonic_dict : dict : Dictionnaire des groupes Sonicparanoid et leurs protéines
+    Parameters
+    ----------
+    final_merged_groups : dict
+        Dictionary of merged groups with associated proteins for each query.
 
-    Returns:
-    - dict : Dictionnaire détaillant chaque groupe Sonicparanoid avec :
-        - Les protéines requêtes associées
-        - Le nombre de protéines correspondantes
-        - La liste complète des protéines de Sonicparanoid pour ce groupe
+    method_dict : dict
+        Dictionary of orthologous groups from a method (e.g., SonicParanoid, Orthologer, OrthoFinder),
+        where keys are group IDs and values are lists of proteins.
+
+    Returns
+    -------
+    tuple
+        - dict: Detailed information for each group found, including:
+            - 'queries': list of associated query proteins
+            - 'count': number of matching proteins found in the group
+            - 'proteins': full list of proteins in the group
+        - dict: Proteins that were not found in any orthologous group, grouped by query protein.
     """
     group_details = {}
     proteins_in_no_group = defaultdict(set)
@@ -279,23 +420,25 @@ def sonic_analysis(final_merged_groups, sonic_dict):
     for query_id, proteins in final_merged_groups.items():
         for protein in proteins:
             found_in_group = False
-            for group_id, sonic_proteins in sonic_dict.items():
-                if protein in sonic_proteins:
+            for group_id, method_proteins in method_dict.items():
+                if protein in method_proteins:
                     if group_id not in group_details:
-                        group_details[group_id] = {"queries": set(), "count": 0, "proteins": set()}
+                        group_details[group_id] = {
+                            "queries": set(),
+                            "count": 0,
+                            "proteins": set()
+                        }
 
-                    # Ajouter la protéine requête et les protéines associées
                     group_details[group_id]["queries"].add(query_id)
-                    group_details[group_id]["proteins"].update(sonic_proteins)
+                    group_details[group_id]["proteins"].update(method_proteins)
                     group_details[group_id]["count"] += 1
                     found_in_group = True
-                    break  # Sortir dès que le groupe est trouvé
+                    break
 
+            # Add proteins that aren't find in a group
             if not found_in_group:
-                # Ajouter les protéines qui ne sont dans aucun groupe
                 proteins_in_no_group[query_id].add(protein)
 
-    # Convertir les ensembles en listes pour affichage
     for group_id in group_details:
         group_details[group_id]["queries"] = list(group_details[group_id]["queries"])
         group_details[group_id]["proteins"] = list(group_details[group_id]["proteins"])
@@ -304,22 +447,89 @@ def sonic_analysis(final_merged_groups, sonic_dict):
 
     return group_details, proteins_in_no_group
 
+
 def extract_species(protein_id):
-    """Extrait le tag d'espèce depuis un ID de protéine (ex: Pfalc_, TGME49_, etc.)."""
+    """
+    Extracts the species tag from a protein ID (e.g., Pfalc_, TGME49_, etc.).
+
+    Parameters
+    ----------
+    protein_id : str
+        The protein identifier from which to extract the species prefix.
+
+    Returns
+    -------
+    str or None
+        The extracted species tag (prefix before the underscore) if found, otherwise None.
+    """
     match = re.match(r"^([A-Za-z0-9]+)_", protein_id)
     return match.group(1) if match else None
 
+
 def get_sequence_from_fasta(fasta_path, protein_id):
+    """
+    Retrieves the amino acid sequence of a given protein ID from a FASTA file.
+
+    Parameters
+    ----------
+    fasta_path : str
+        Path to the FASTA file containing protein sequences.
+    protein_id : str
+        Identifier of the protein whose sequence is to be retrieved.
+
+    Returns
+    -------
+    str or None
+        The amino acid sequence of the protein if found, otherwise None.
+    """
     for record in SeqIO.parse(fasta_path, "fasta"):
         if protein_id in record.id:
             return str(record.seq)
     return None
 
+
 def calculate_similarity(seq1, seq2):
+    """
+    Calculates a simple similarity score between two protein sequences using global alignment.
+
+    Parameters
+    ----------
+    seq1 : str
+        First protein sequence.
+    seq2 : str
+        Second protein sequence.
+
+    Returns
+    -------
+    float
+        Normalized similarity score between 0 and 1, based on the number of identical matches
+        in the best global alignment. Returns 0 if either sequence is empty or None.
+    """
     alignments = pairwise2.align.globalxx(seq1, seq2, one_alignment_only=True, score_only=True)
     return alignments / max(len(seq1), len(seq2)) if seq1 and seq2 else 0
 
+
 def compute_group_similarity_score(group_proteins, query_seq, fasta_dir_species, species_df):
+    """
+    Computes the average similarity score between a query sequence and a set of orthologous proteins.
+
+    Parameters
+    ----------
+    group_proteins : list
+        List of protein IDs from an orthologous group.
+    query_seq : str
+        Amino acid sequence of the query protein.
+    fasta_dir_species : str
+        Path to the directory containing species-specific FASTA files.
+    species_df : pandas.DataFrame
+        DataFrame containing species metadata with at least 'Particule' and 'File' columns.
+
+    Returns
+    -------
+    float
+        Average similarity score between the query sequence and all valid group proteins.
+        Returns 0 if no sequences could be compared.
+    """
     scores = []
     for prot in group_proteins:
         species_code = extract_species(prot)
@@ -330,11 +540,24 @@ def compute_group_similarity_score(group_proteins, query_seq, fasta_dir_species,
             if seq:
                 sim = calculate_similarity(query_seq, seq)
                 scores.append(sim)
-    return sum(scores)/len(scores) if scores else 0
+    return sum(scores) / len(scores) if scores else 0
+
 
 def get_seq_fasta(fasta_dir, protein_id):
     """
-    Recherche une séquence dans tous les fichiers fasta du dossier donné.
+    Searches for a protein sequence in all FASTA files within the specified directory.
+
+    Parameters
+    ----------
+    fasta_dir : str
+        Path to the directory containing FASTA files.
+    protein_id : str
+        ID of the protein to search for.
+
+    Returns
+    -------
+    str or None
+        The protein sequence if found, otherwise None.
     """
     for file_name in os.listdir(fasta_dir):
         if not file_name.endswith(".fasta"):
@@ -347,12 +570,27 @@ def get_seq_fasta(fasta_dir, protein_id):
 
 
 def build_tree(sequences, tree_dir):
+    """
+    Builds a phylogenetic tree from a dictionary of protein sequences using MAFFT for alignment
+    and FastTree for tree inference.
+
+    Parameters
+    ----------
+    sequences : dict
+        Dictionary where keys are protein IDs and values are sequences (strings).
+    tree_dir : str
+        Path to the directory where intermediate and output files will be saved.
+
+    Returns
+    -------
+    str
+        Path to the resulting Newick tree file.
+    """
     os.makedirs(tree_dir, exist_ok=True)
     raw_fasta = os.path.join(tree_dir, "all_seqs_raw.fasta")
     aligned_fasta = os.path.join(tree_dir, "aligned_seqs.fasta")
     tree_path = os.path.join(tree_dir, "tree.nwk")
 
-    # Écrire les séquences originales dans un FASTA
     seq_records = [
         SeqRecord(Seq(seq), id=f"{id}", description="")
         for id, seq in sequences.items()
@@ -360,11 +598,11 @@ def build_tree(sequences, tree_dir):
     ]
     SeqIO.write(seq_records, raw_fasta, "fasta")
 
-    # Étape 1 : alignement avec MAFFT
+    # Step 1: Align sequences using MAFFT
     mafft_cmd = f"mafft --auto {raw_fasta} > {aligned_fasta}"
     subprocess.run(mafft_cmd, shell=True, check=True)
 
-    # Étape 2 : arbre avec FastTree
+    # Step 2: Build phylogenetic tree using FastTree
     fasttree_cmd = f"fasttree {aligned_fasta} > {tree_path}"
     subprocess.run(fasttree_cmd, shell=True, check=True)
 
@@ -372,27 +610,42 @@ def build_tree(sequences, tree_dir):
 
 
 def compute_z_scores_and_ratios(long_branch_scores, orphans, df):
-    # Séparer les scores
-    non_orphan_scores = [v for k, v in long_branch_scores.items() if k not in orphans]
+    """
+    Computes Z-scores for protein branch lengths and identifies the lowest Z-score
+    per species.
 
-    # Moyenne et écart-type des non-orphelins
+    Parameters
+    ----------
+    long_branch_scores : dict
+        Dictionary mapping protein IDs to their long branch scores.
+    orphans : set
+        Set of orphan protein IDs to exclude from Z-score reference computation.
+    df : pandas.DataFrame
+        DataFrame containing species metadata with at least the columns 'Organism' and 'Particule'.
+
+    Returns
+    -------
+    z_scores : dict
+        Dictionary mapping each protein ID to its Z-score.
+    min_z_by_species : dict
+        Dictionary mapping each species name to the minimum Z-score observed among its proteins.
+    """
+    # Compute mean and standard deviation using only non-orphan proteins
+    non_orphan_scores = [v for k, v in long_branch_scores.items() if k not in orphans]
     mean_non_orphans = np.mean(non_orphan_scores)
     std_non_orphans = np.std(non_orphan_scores)
 
-    # Calcul des z-scores pour toutes les protéines
+    # Compute Z-scores for all proteins
     z_scores = {
         k: (v - mean_non_orphans) / std_non_orphans
         for k, v in long_branch_scores.items()
     }
 
-    # Dictionnaire des max z-scores par espèce
+    # Determine minimum Z-score per species
     min_z_by_species = {}
-
     for _, row in df.iterrows():
         organism = row["Organism"]
         prefix = row["Particule"]
-
-        # Sélectionner les protéines avec le bon préfixe
         matched = {k: z for k, z in z_scores.items() if k.startswith(prefix)}
 
         if matched:
@@ -560,7 +813,6 @@ def compare_species_between_groups(reference_groups, analyzed_groups, proteins_i
             phykit_cmd = f"phykit long_branch_score {tree} -v"
             result = subprocess.run(phykit_cmd, shell=True, capture_output=True, text=True, check=True)
 
-            #spurious_output = subprocess.check_output(["phykit", "spurious_seq", tree]).decode().strip()
 
             # Parser les résultats dans un dictionnaire {leaf_name: score}
             long_branch_scores = {}
@@ -574,30 +826,41 @@ def compare_species_between_groups(reference_groups, analyzed_groups, proteins_i
 
             all_orphan_ids = list(orphan_seqs_dict.keys())
             for orphan in all_orphan_ids:
-                # if is_long_branch(tree, orphan, all_orphan_ids):
-                #     no_groups_rejected.append(orphan)
-                # else:
-                #     no_groups.append(orphan)
                 no_groups.append(orphan)
 
             merged_no_common[query][current_group_id]["orphans"] = no_groups
 
     return merged_no_common, min_by_species
 
+
 def write_final_groups_with_sequences(nom_prot, new_groups, output_results, fasta_dir):
     """
-    Écrit les groupes finaux avec leurs séquences FASTA dans un fichier.
+    Writes the final ortholog groups along with their FASTA sequences to a file.
+
+    Parameters
+    ----------
+    nom_prot : str
+        Name of the reference protein or query.
+    new_groups : dict
+        Dictionary of grouped proteins organized by group, cluster, and subcluster.
+    output_results : str
+        Path to the main output directory.
+    fasta_dir : str
+        Path to the directory containing FASTA files for each species.
+
+    Output
+    ------
+    A FASTA file is created in the 'final_groups' subdirectory containing all sequences 
+    for the given groups, formatted with subcluster and protein identifiers.
     """
-    # Créer le dossier si nécessaire
     dir_fgroups = os.path.join(output_results, "final_groups")
     os.makedirs(dir_fgroups, exist_ok=True)
 
-    # Définir le fichier de sortie
     output_file = os.path.join(dir_fgroups, f"{nom_prot}_orthogroups.fasta")
 
     with open(output_file, "w") as f:
         for group, id_dict in new_groups.items():
-            f.write(f">{group}\n")  # Nom du groupe (commentaire)
+            f.write(f">{group}\n")
             for cluster_id, subcluster in id_dict.items():
                 for sub_id, seq_list in subcluster.items():
                     for protein_id in seq_list:
@@ -605,10 +868,24 @@ def write_final_groups_with_sequences(nom_prot, new_groups, output_results, fast
                         if sequence:
                             f.write(f">{sub_id}|{protein_id}\n{sequence}\n\n")
                         else:
-                            print(f"Séquence non trouvée pour {protein_id}")
+                            print(f"Sequence not found for {protein_id}")
 
 
 def load_protein_mapping(csv_file):
+    """
+    Loads a CSV file containing the mapping between protein codes and their names.
+
+    Parameters
+    ----------
+    csv_file : str
+        Path to the CSV file. The file must contain at least two columns:
+        'code_proteine' and 'nom_proteine'.
+
+    Returns
+    -------
+    dict
+        A dictionary mapping each protein code to its corresponding protein name.
+    """
     mapping = {}
     with open(csv_file, newline='', encoding='utf-8') as f:
         reader = csv.DictReader(f, delimiter=',')
@@ -616,31 +893,55 @@ def load_protein_mapping(csv_file):
             mapping[row["code_proteine"]] = row["nom_proteine"]
     return mapping
 
+
 def get_busco_scores(csv_file):
+    """
+    Loads a CSV file containing BUSCO scores and returns a dictionary
+    mapping each organism to its corresponding BUSCO score.
+
+    Parameters
+    ----------
+    csv_file : str
+        Path to the CSV file. The file must contain the columns:
+        'Organism' and 'BUSCO_score'.
+
+    Returns
+    -------
+    dict
+        A dictionary where keys are organism names and values are BUSCO scores.
+    """
     df = pd.read_csv(csv_file)
     return dict(zip(df['Organism'], df['BUSCO_score']))
 
+
 def generate_presence_absence_table_single_group(orthologs_group, species_dict):
     """
-    Génère un tableau de présence/absence avec identifiants de groupes orthologues.
+    Generates a presence/absence matrix with ortholog group identifiers.
 
-    Chaque cellule contient :
-    - 0 si l'espèce n'est présente dans aucun groupe
-    - 1, 2, 3... selon le groupe auquel appartient l'espèce
-    - n+1 pour le groupe 'no_group'
+    Each cell contains:
+    - 0 if the species is not present in any group
+    - 1, 2, 3... indicating the group index the species belongs to
+    - n+1 for the 'no_group' (orphans)
 
-    Parameters:
-    - orthologs_group : dict : {query_id: dict(fusion_id: dict(group_id: list(proteins)))}
-    - species_dict : dict : {'Pfalc': 'Plasmodium falciparum', ...}
+    Parameters
+    ----------
+    orthologs_group : dict
+        Nested dictionary of ortholog groups structured as:
+        {query_id: {fusion_id: {group_id: list of proteins}}}
+    species_dict : dict
+        Mapping from species tag (e.g., 'Pfalc') to species full name 
+        (e.g., 'Plasmodium falciparum').
 
-    Returns:
-    - pd.DataFrame : DataFrame avec identifiants de groupe pour chaque espèce
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame where rows correspond to query proteins and columns
+        indicate the group assignment per species.
     """
     all_species = sorted(set(species_dict.values()))
     data = []
 
     for query_id, fusions in orthologs_group.items():
-        # Fusionner tous les groupes dans un seul dictionnaire
         merged_groups = {}
         for fusion_id, group_dict in fusions.items():
             for group_id, proteins in group_dict.items():
@@ -654,14 +955,13 @@ def generate_presence_absence_table_single_group(orthologs_group, species_dict):
                 species = species_dict.get(prot[:5])
                 if species and species not in species_to_group:
                     if group_id == "orphans":
-                        # on le marque à part, temporairement
-                        species_to_group[species] = -1
+                        species_to_group[species] = -1  # Temporarily mark as orphan
                     else:
                         species_to_group[species] = group_index
             if group_id != "orphans":
                 group_index += 1
 
-        # Après avoir terminé, on assigne no_group à group_index (le suivant)
+        # Assign orphan group to the next group index
         for species, value in species_to_group.items():
             if value == -1:
                 species_to_group[species] = group_index
@@ -676,8 +976,34 @@ def generate_presence_absence_table_single_group(orthologs_group, species_dict):
     df = pd.DataFrame(data, columns=columns)
     return df
 
+
 def merge_ortholog_groups(sonic_ortholog, orthofinder_ortholog, orthologer_ortholog):
-    """Fusionne les données des trois sources en associant chaque ID à ses groupes orthologues."""
+    """
+    Merges ortholog group data from three different sources by associating 
+    each protein ID with its ortholog group from each source.
+
+    Parameters
+    ----------
+    sonic_ortholog : dict
+        Dictionary of SonicParanoid ortholog groupings: {protein_id: {"ortholog_group": group_data}}.
+    orthofinder_ortholog : dict
+        Dictionary of OrthoFinder ortholog groupings.
+    orthologer_ortholog : dict
+        Dictionary of Orthologer ortholog groupings.
+
+    Returns
+    -------
+    dict
+        A merged dictionary where each protein ID maps to a sub-dictionary of 
+        source-to-group associations:
+        {
+            protein_id: {
+                "sonic": group_data,
+                "orthofinder": group_data,
+                "orthologer": group_data
+            }
+        }
+    """
     merged_dict = {}
 
     for ortho_type, ortholog_data in {
@@ -692,12 +1018,49 @@ def merge_ortholog_groups(sonic_ortholog, orthofinder_ortholog, orthologer_ortho
 
     return merged_dict
 
+
 def rename_keys(orthogroups, mapping):
+    """
+    Rename the keys of a dictionary using a provided mapping.
+
+    Parameters
+    ----------
+    orthogroups : dict
+        Dictionary with original keys to rename.
+    mapping : dict
+        Dictionary mapping old keys to new keys.
+
+    Returns
+    -------
+    dict
+        New dictionary with keys renamed according to the mapping.
+        Keys not found in the mapping remain unchanged.
+    """
     return {mapping.get(k, k): v for k, v in orthogroups.items()}
+
 
 def generate_presence_absence_table(orthologs_sonic_group, orthologs_orthologer_group, orthologs_orthofinder_group, species_dict, merged_ortholog_groups):
     """
-    Génère un tableau de présence/absence avec les query_id d'abord inchangés, puis renommés à la fin.
+    Generate a presence/absence table with original query_ids first, then renamed at the end.
+
+    Parameters
+    ----------
+    orthologs_sonic_group : dict
+        Dictionary of Sonic ortholog groups by query_id.
+    orthologs_orthologer_group : dict
+        Dictionary of Orthologer groups by query_id.
+    orthologs_orthofinder_group : dict
+        Dictionary of OrthoFinder groups by query_id.
+    species_dict : dict
+        Dictionary mapping species prefixes to full species names.
+    merged_ortholog_groups : dict
+        Dictionary mapping query_id to its group IDs for each method.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame showing presence (1) or absence (0) of species per query_id,
+        with query_ids renamed by method suffix at the end.
     """
     all_species = set(species_dict.values())
     query_sequences = set(orthologs_sonic_group.keys()).union(set(orthologs_orthologer_group.keys()), set(orthologs_orthofinder_group.keys()))
@@ -705,7 +1068,6 @@ def generate_presence_absence_table(orthologs_sonic_group, orthologs_orthologer_
     data = []
     
     for query_id in query_sequences:
-        # Récupérer les espèces présentes pour chaque groupe
         species_in_sonic = {species_dict.get(prot[:5], None) for prot in orthologs_sonic_group.get(query_id, [])}
         species_in_orthologer = {species_dict.get(prot[:5], None) for prot in orthologs_orthologer_group.get(query_id, [])}
         species_in_orthofinder = {species_dict.get(prot[:5], None) for prot in orthologs_orthofinder_group.get(query_id, [])}
@@ -714,7 +1076,7 @@ def generate_presence_absence_table(orthologs_sonic_group, orthologs_orthologer_
         species_in_orthologer.discard(None)
         species_in_orthofinder.discard(None)
         
-        row = [query_id]  # Garde d'abord le query_id original
+        row = [query_id]
         
         for species in all_species:
             in_combined = 1 if (species in species_in_sonic or species in species_in_orthologer or species in species_in_orthofinder) else 0
@@ -722,22 +1084,40 @@ def generate_presence_absence_table(orthologs_sonic_group, orthologs_orthologer_
 
         data.append(row)
 
-    # Création du DataFrame
     columns = ['Query Protein'] + list(all_species)
     df = pd.DataFrame(data, columns=columns)
 
-    # Renommage des query_id à la fin
     renamed_queries = {}
     for query_id, methods in merged_ortholog_groups.items():
         for method, group_id in methods.items():
             new_query_name = f"{query_id}_{method}"
             renamed_queries[group_id] = new_query_name
 
-    # Appliquer le renommage sur la colonne "Query Protein"
     df['Query Protein'] = df['Query Protein'].map(renamed_queries).fillna(df['Query Protein'])
     return df
 
 def sort_key(query_protein):
+    """
+    Generate a sorting key for query protein identifiers.
+
+    This function:
+    - Splits a query protein string by underscores.
+    - Uses the first two segments as the protein identifier.
+    - Uses the third segment (method suffix) if present.
+    - Returns a tuple (protein_id, method) for consistent sorting.
+
+    Parameters
+    ----------
+    query_protein : str
+        The query protein identifier in the format 'ProteinID_Method' or 'ProteinID_SubID_Method'.
+
+    Returns
+    -------
+    tuple
+        A tuple (protein_id, method) where:
+        - protein_id is the combined first two segments (e.g., 'Prot_XYZ').
+        - method is the third segment if it exists, otherwise an empty string.
+    """
     parts = query_protein.split("_")
     protein_id = parts[0] + "_" + parts[1]
     method = parts[2] if len(parts) > 2 else ""
@@ -804,11 +1184,6 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
                 ortholog_orthofinder = parse_hits_in_orthogroups(orthofinder_dict, results)
                 orthologs_orthofinder_group = retrieve_orthologous_proteins(orthofinder_dict, ortholog_orthofinder)
 
-                merged_proteins_by_query = merge_orthologous_groups_by_protein(
-                    ortholog_orthologer, orthologs_orthologer_group, ortholog_orthofinder, orthologs_orthofinder_group
-                )
-                final_merged_groups = remove_duplicate_groups(merged_proteins_by_query)
-
                 # Sélectionner dynamiquement la méthode avec le plus petit groupe total
                 group_sizes = {
                     "sonic": sum(len(g) for g in orthologs_sonic_group.values()),
@@ -818,16 +1193,30 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
 
                 smallest_method = min(group_sizes, key=group_sizes.get)
 
-                # Assigner dynamiquement les groupes
                 if smallest_method == "sonic":
+                    merged_proteins_by_query = merge_orthologous_groups_by_protein(
+                    ortholog_orthologer, orthologs_orthologer_group, ortholog_orthofinder, orthologs_orthofinder_group)
+                    final_merged_groups = remove_duplicate_groups(merged_proteins_by_query)
+
                     ref_groups = orthologs_sonic_group
-                    analysis_groups, no_group_proteins = sonic_analysis(final_merged_groups, sonic_dict)
+                    analysis_groups, no_group_proteins = analyze_orthologous_groups(final_merged_groups, sonic_dict)
+                
                 elif smallest_method == "orthologer":
+                    merged_proteins_by_query = merge_orthologous_groups_by_protein(
+                    ortholog_sonic, orthologs_sonic_group, ortholog_orthofinder, orthologs_orthofinder_group)
+                    final_merged_groups = remove_duplicate_groups(merged_proteins_by_query)
+
                     ref_groups = orthologs_orthologer_group
-                    analysis_groups, no_group_proteins = sonic_analysis(final_merged_groups, orthologer_dict)
+                    analysis_groups, no_group_proteins = analyze_orthologous_groups(final_merged_groups, orthologer_dict)
+
                 else:  # orthofinder
+                    merged_proteins_by_query = merge_orthologous_groups_by_protein(
+                    ortholog_orthologer, orthologs_orthologer_group, ortholog_sonic, orthologs_sonic_group)
+                    final_merged_groups = remove_duplicate_groups(merged_proteins_by_query)
+
                     ref_groups = orthologs_orthofinder_group
-                    analysis_groups, no_group_proteins = sonic_analysis(final_merged_groups, orthofinder_dict)
+                    analysis_groups, no_group_proteins = analyze_orthologous_groups(final_merged_groups, orthofinder_dict)
+
 
                 # Comparaison avec la méthode à plus petits groupes
                 new_groups, max_z_by_species = compare_species_between_groups(
@@ -1268,11 +1657,7 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
 
     axes_final[2].set_xticks([x + 0.5 for x in range(n_cols)])
     axes_final[2].set_xticklabels(zscore_df.columns, fontsize=12, rotation=90)
-#    axes_final[2].tick_params(axis='x', length=0, pad=8)
     axes_final[2].xaxis.tick_top()
-
-    # for label in axes_final[2].get_xticklabels():
-    #     label.set_bbox(dict(facecolor='white', edgecolor='black', boxstyle='square,pad=0.4'))
 
     box = axes_final[2].get_position()
     axes_final[2].set_position([box.x0, box.y0, box.width, box.height])

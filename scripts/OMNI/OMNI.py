@@ -1,8 +1,38 @@
+"""
+Protein Orthology Comparison Pipeline
+
+This script serves as a command-line interface for analyzing orthologous protein groups
+across species using precomputed FASTA and orthology inference data.
+
+Runs the `run_table()` function which performs:
+   - Merging and comparison of orthologous groups from multiple inference tools.
+   - Dynamic selection of the most compact reference group for species comparison.
+   - Evaluation of orthology consistency across tools.
+   - Optional integration of tree-based analyses.
+
+Usage example:
+    python3 main.py -fd /path/to/fasta -o /path/to/output -i /path/to/proteins.csv -s /path/to/species.csv
+    - t /path/to/tree.nwk -pf /path/to/fasta_protein
+
+Arguments:
+    -fd / --fasta_dir        : Directory containing translated protein FASTA files.
+    -o  / --output_dir       : Directory to save analysis results.
+    -i  / --interest_file    : CSV file with proteins of interest.
+    -s  / --species_file     : CSV file with species/sample metadata.
+    -t  / --tree_file        : Optional path to a phylogenetic tree in Newick format.
+    -pf / --protein_fasta    : Optional path to a combined protein FASTA file.
+
+Dependencies:
+    - Python libraries: argparse, shutil, pandas.
+    - External tools for ortholog inference must be run beforehand.
+    - `run_table()` function (imported from `table.py`) performs core analysis.
+
+Author(s): Romain DAGUERRE
+"""
+
 from table import run_table
 
 import argparse
-import os
-import glob
 from argparse import RawTextHelpFormatter
 
 def _set_args():
@@ -82,4 +112,3 @@ if __name__ == "__main__":
         run_table(fasta_dir, output_dir, tree_file, interest_file, species_file, protein_fasta)
     else:
         run_table(fasta_dir, output_dir, tree_file, interest_file, species_file, None)
-    #run_table(fasta_dir, output_dir, tree_file, interest_file, species_file)
