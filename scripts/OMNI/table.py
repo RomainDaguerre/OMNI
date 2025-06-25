@@ -20,6 +20,7 @@ from PIL import Image
 from matplotlib.patches import Patch
 
 
+
 def fetch_sequence_ncbi_single(protein_id, protein_name, output_fasta, email="romain.daguerre1119@gmail.com"):
     Entrez.email = email  # Obligatoire pour utiliser Entrez
 
@@ -743,7 +744,7 @@ def sort_key(query_protein):
     return (protein_id, method)
 
 
-def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file):
+def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file, fasta_protein):
 
     output_orthogroup_file = os.path.join(output_dir, "orthogroups")
     sonic_file_name = "sonicParanoid.csv"
@@ -773,9 +774,12 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
             output_results = os.path.join(output_dir, nom_prot)
             blast_output_dir = os.path.join(output_results, "blast_results")
             os.makedirs(blast_output_dir, exist_ok=True)
-
-            fasta_interest_dir = os.path.join(output_results, f"{nom_prot}.fasta")
-            fetch_sequence_ncbi_single(protein, nom_prot, fasta_interest_dir)
+            
+            if fasta_protein == None :
+                fasta_interest_dir = os.path.join(output_results, f"{nom_prot}.fasta")
+                fetch_sequence_ncbi_single(protein, nom_prot, fasta_interest_dir)
+            else :
+                fasta_interest_dir = os.path.join(fasta_protein, f"{nom_prot}.fasta")
 
             if os.path.exists(fasta_interest_dir) and os.path.exists(db_fasta):
                 blast_output = os.path.join(blast_output_dir, f"{espece}_blast.txt")
@@ -805,8 +809,32 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
                 )
                 final_merged_groups = remove_duplicate_groups(merged_proteins_by_query)
 
-                sonic_group_analysis, no_group_proteins = sonic_analysis(final_merged_groups, sonic_dict)
-                new_groups, max_z_by_species = compare_species_between_groups(orthologs_sonic_group, sonic_group_analysis, no_group_proteins, species_file, fasta_interest_dir, fasta_dir, prot_interest_file, output_results, "species_count")
+                # Sélectionner dynamiquement la méthode avec le plus petit groupe total
+                group_sizes = {
+                    "sonic": sum(len(g) for g in orthologs_sonic_group.values()),
+                    "orthologer": sum(len(g) for g in orthologs_orthologer_group.values()),
+                    "orthofinder": sum(len(g) for g in orthologs_orthofinder_group.values())
+                }
+
+                smallest_method = min(group_sizes, key=group_sizes.get)
+
+                # Assigner dynamiquement les groupes
+                if smallest_method == "sonic":
+                    ref_groups = orthologs_sonic_group
+                    analysis_groups, no_group_proteins = sonic_analysis(final_merged_groups, sonic_dict)
+                elif smallest_method == "orthologer":
+                    ref_groups = orthologs_orthologer_group
+                    analysis_groups, no_group_proteins = sonic_analysis(final_merged_groups, orthologer_dict)
+                else:  # orthofinder
+                    ref_groups = orthologs_orthofinder_group
+                    analysis_groups, no_group_proteins = sonic_analysis(final_merged_groups, orthofinder_dict)
+
+                # Comparaison avec la méthode à plus petits groupes
+                new_groups, max_z_by_species = compare_species_between_groups(
+                    ref_groups, analysis_groups, no_group_proteins,
+                    species_file, fasta_interest_dir, fasta_dir,
+                    prot_interest_file, output_results, "similarity"
+                )
 
                 '''orthogroup output'''
                 '''

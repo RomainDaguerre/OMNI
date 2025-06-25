@@ -51,6 +51,12 @@ def _set_args():
         help="Path to the phylogenetic tree (active this option if needed)."
     )
 
+    optional.add_argument(
+        "-pf", "--protein_fasta",
+        metavar="PATH",
+        help="Optional path to all protein FASTA file."
+    )
+
     args = vars(parser.parse_args())
 
     global fasta_dir
@@ -63,10 +69,17 @@ def _set_args():
     interest_file = args["interest_file"]
     global species_file
     species_file = args["species_file"]
+    global protein_fasta
+    protein_fasta = args["protein_fasta"]
 
 
 if __name__ == "__main__":
 
     _set_args()
 
-    run_table(fasta_dir, output_dir, tree_file, interest_file, species_file)
+    print(protein_fasta)
+    if protein_fasta:
+        run_table(fasta_dir, output_dir, tree_file, interest_file, species_file, protein_fasta)
+    else:
+        run_table(fasta_dir, output_dir, tree_file, interest_file, species_file, None)
+    #run_table(fasta_dir, output_dir, tree_file, interest_file, species_file)
