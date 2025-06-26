@@ -655,180 +655,352 @@ def compute_z_scores_and_ratios(long_branch_scores, orphans, df):
     return z_scores, min_z_by_species
 
 
-def compare_species_between_groups(reference_groups, analyzed_groups, proteins_in_no_group, species_file, fasta_dir_query, fasta_dir_species, prot_interest_file, output_dir, sort_method="species_count"):
+def load_species_and_protein_codes(species_file, prot_interest_file):
     """
-    Fusionne les groupes sans espèces communes.
-    sort_method : 'species_count' (par défaut) ou 'similarity'
+    Load species data and map protein names to protein codes.
+
+    Parameters
+    ----------
+    species_file : str
+        Path to the CSV file containing species information.
+    prot_interest_file : str
+        Path to the CSV file mapping protein names to protein codes.
+
+    Returns
+    -------
+    tuple
+        species_df : pandas.DataFrame
+            DataFrame with species information.
+        query_to_code : dict
+            Dictionary mapping protein names (str) to protein codes (str).
     """
     species_df = pd.read_csv(species_file)
     query_to_code = pd.read_csv(prot_interest_file, sep=",").set_index("nom_proteine")["code_proteine"].to_dict()
+    return species_df, query_to_code
 
+
+def gather_common_species(reference_groups, analyzed_groups):
+    """
+    Extract common species present in analyzed groups keyed by query protein.
+
+    Parameters
+    ----------
+    reference_groups : iterable
+        Iterable of reference group IDs to analyze.
+    analyzed_groups : dict
+        Dictionary with group_id keys and group information values.
+
+    Returns
+    -------
+    defaultdict
+        Nested defaultdict mapping query protein -> group_id -> set of species.
+    """
     common_species = defaultdict(lambda: defaultdict(set))
-    merged_no_common = defaultdict(dict)
-    fusion_count = 0
-
     for group_id in reference_groups:
         group_info = analyzed_groups[group_id]
         query = group_info["queries"][0]
         group_species = set(extract_species(p) for p in group_info["proteins"] if extract_species(p))
         common_species[query][group_id] = group_species
+    return common_species
+
+
+def sort_groups(matching_group_ids, analyzed_groups, query_seq, fasta_dir_species, species_df, sort_method):
+    """
+    Sort matching groups by either species count or sequence similarity.
+
+    Parameters
+    ----------
+    matching_group_ids : list
+        List of group IDs to sort.
+    analyzed_groups : dict
+        Dictionary with group data including proteins.
+    query_seq : str
+        The sequence of the query protein.
+    fasta_dir_species : str
+        Directory containing species fasta sequences.
+    species_df : pandas.DataFrame
+        DataFrame containing species info.
+    sort_method : str
+        Sorting method, either "species_count" or "similarity".
+
+    Returns
+    -------
+    list
+        Sorted list of group IDs according to the chosen method.
+    """
+    if sort_method == "species_count":
+        print("Tri par nombre d'espèces")
+        sorted_groups = sorted(
+            matching_group_ids,
+            key=lambda gid: len(analyzed_groups[gid]["proteins"]),
+            reverse=True
+        )
+    elif sort_method == "similarity":
+        print("Tri par similarité de séquence")
+        similarity_scores = {
+            gid: compute_group_similarity_score(analyzed_groups[gid]["proteins"], query_seq, fasta_dir_species, species_df)
+            for gid in matching_group_ids
+        }
+        sorted_groups = sorted(matching_group_ids, key=lambda gid: similarity_scores[gid], reverse=True)
+    else:
+        sorted_groups = matching_group_ids
+    return sorted_groups
+
+
+def merge_groups_for_query(query, ref_groups, analyzed_groups, sorted_matching_groups, fusion_count_start=0):
+    """
+    Merge groups that do not share any common species for each query protein.
+
+    Parameters
+    ----------
+    common_species : defaultdict
+        Nested dictionary query -> group_id -> species set.
+    analyzed_groups : dict
+        Dictionary with group info including proteins and queries.
+    sort_method : str
+        Method to sort matching groups ('species_count' or 'similarity').
+    fasta_dir_query : str
+        Directory containing query protein fasta sequences.
+    fasta_dir_species : str
+        Directory containing species fasta sequences.
+    species_df : pandas.DataFrame
+        DataFrame with species info.
+    query_to_code : dict
+        Mapping from query protein names to protein codes.
+
+    Returns
+    -------
+    tuple
+        merged_no_common : dict
+            Dictionary with merged groups keyed by query and merged group IDs.
+        fusion_count : int
+            Number of fusions performed.
+    """
+    merged_groups = defaultdict(dict)
+    fusion_count = fusion_count_start
+    already_merged = set()
+
+    for ref_group_id, ref_species_set in ref_groups.items():
+        print(f"Groupe de référence {ref_group_id} ({len(ref_species_set)} espèces) :")
+
+        current_group_id = ref_group_id
+        current_proteins_by_group = defaultdict(list)
+        current_species = ref_species_set.copy()
+
+        for prot in analyzed_groups[ref_group_id]["proteins"]:
+            current_proteins_by_group[ref_group_id].append(prot)
+
+        for test_group_id in sorted_matching_groups:
+            if test_group_id == ref_group_id or test_group_id in already_merged:
+                continue
+
+            test_info = analyzed_groups[test_group_id]
+            test_species_set = set(extract_species(p) for p in test_info["proteins"] if extract_species(p))
+            shared_species = current_species & test_species_set
+
+            print(f"    ↪ Comparé avec groupe {test_group_id} ({len(test_species_set)} espèces) :")
+            if shared_species:
+                print(f"Espèces communes : {shared_species} → Pas de fusion")
+                continue
+            else:
+                print(f"Aucune espèce commune → Fusion")
+                for prot in test_info["proteins"]:
+                    current_proteins_by_group[test_group_id].append(prot)
+                current_species |= test_species_set
+                already_merged.add(test_group_id)
+                current_group_id = f"fusion_{fusion_count}"
+
+        if isinstance(current_group_id, str) and current_group_id.startswith("fusion_"):
+            fusion_count += 1
+
+        merged_groups[query][current_group_id] = dict(current_proteins_by_group)
+
+    return merged_groups, fusion_count
+
+
+def filter_orphans(proteins_in_no_group, merged_no_common):
+    """
+    Identify orphans (proteins not in any group) whose species are not already represented.
+
+    Parameters
+    ----------
+    merged_no_common : dict
+        Dictionary of merged groups keyed by query and group IDs.
+    proteins_in_no_group : dict
+        Dictionary mapping query proteins to lists of orphan proteins.
+
+    Returns
+    -------
+    list
+        List of tuples (query, orphan_protein) for orphans with unique species.
+    """
+    filtered_orphans = []
+    for query in proteins_in_no_group:
+        if query not in merged_no_common:
+            continue
+        for orphan in proteins_in_no_group[query]:
+            orphan_species = extract_species(orphan)
+            existing_species = {
+                extract_species(p)
+                for group in merged_no_common[query].values()
+                for plist in group.values()
+                for p in plist
+            }
+            if orphan_species not in existing_species:
+                filtered_orphans.append((query, orphan))
+    print(f"Orphelins : {filtered_orphans}")
+    return filtered_orphans
+
+
+def process_orphans_and_build_tree(merged_no_common, proteins_in_no_group, fasta_dir_species, species_df, output_dir):
+    """
+    For each query, combine group protein sequences and orphans sequences,
+    build a phylogenetic tree, calculate long branch scores and z-scores,
+    and update merged_no_common with orphan info.
+
+    Parameters
+    ----------
+    merged_no_common : dict
+        Merged groups keyed by query and group IDs.
+    proteins_in_no_group : dict
+        Dictionary mapping queries to orphan proteins.
+    fasta_dir_species : str
+        Directory containing species fasta sequences.
+    output_dir : str
+        Directory to store output trees.
+    species_df : pandas.DataFrame
+        DataFrame with species information.
+
+    Returns
+    -------
+    tuple
+        merged_no_common : dict
+            Updated dictionary including orphan information.
+        min_by_species : dict
+            Computed minimum z-scores or ratios by species.
+    """
+    min_by_species = None
+    for query in merged_no_common:
+        if query not in proteins_in_no_group:
+            continue
+
+        group_seqs_dict = {
+            p: get_seq_fasta(fasta_dir_species, p)
+            for group in merged_no_common[query].values()
+            for plist in group.values()
+            for p in plist
+        }
+
+        orphans = [
+            orphan for orphan in proteins_in_no_group[query]
+            if extract_species(orphan) not in {
+                extract_species(p)
+                for group in merged_no_common[query].values()
+                for plist in group.values()
+                for p in plist
+            }
+        ]
+
+        orphan_seqs_dict = {
+            orphan: get_seq_fasta(fasta_dir_species, orphan)
+            for orphan in orphans
+        }
+
+        combined_seqs = {**group_seqs_dict, **orphan_seqs_dict}
+
+        output_tree = os.path.join(output_dir, "tree")
+        tree = build_tree(combined_seqs, output_tree)
+
+        phykit_cmd = f"phykit long_branch_score {tree} -v"
+        result = subprocess.run(phykit_cmd, shell=True, capture_output=True, text=True, check=True)
+
+        long_branch_scores = {}
+        for line in result.stdout.strip().split('\n'):
+            parts = line.split()
+            if len(parts) == 2:
+                name, score = parts
+                long_branch_scores[name] = float(score)
+
+        z_scores, min_by_species = compute_z_scores_and_ratios(long_branch_scores, orphans, species_df)
+
+        # Adding orphans
+        all_orphan_ids = list(orphan_seqs_dict.keys())
+        for orphan in all_orphan_ids:
+            last_group_id = max(merged_no_common[query].keys(), key=lambda x: x.startswith("fusion_"))
+            merged_no_common[query][last_group_id].setdefault("orphans", []).append(orphan)
+
+    return merged_no_common, min_by_species
+
+
+def compare_species_between_groups(reference_groups, analyzed_groups, proteins_in_no_group, species_file, fasta_dir_query, fasta_dir_species, prot_interest_file, output_dir, sort_method="species_count"):
+    """
+    Main function to merge groups with no common species and handle orphans.
+
+    This function orchestrates the process by:
+    - Loading species and protein code data.
+    - Extracting common species per group.
+    - Sorting and merging groups without shared species.
+    - Filtering orphans that represent unique species.
+    - Building phylogenetic trees with combined sequences.
+    - Computing long branch scores and z-scores for orphan evaluation.
+
+    Parameters
+    ----------
+    reference_groups : iterable
+        Reference group IDs to consider.
+    analyzed_groups : dict
+        Dictionary of group information.
+    proteins_in_no_group : dict
+        Dictionary mapping query proteins to orphan proteins.
+    species_file : str
+        Path to species CSV file.
+    fasta_dir_query : str
+        Directory of query protein fasta files.
+    fasta_dir_species : str
+        Directory of species fasta files.
+    prot_interest_file : str
+        CSV file mapping protein names to codes.
+    output_dir : str
+        Directory where output files and trees will be saved.
+    sort_method : str, optional
+        Sorting method for group merging ('species_count' or 'similarity'), by default 'species_count'.
+
+    Returns
+    -------
+    tuple
+        merged_no_common : dict
+            Dictionary of merged groups including orphans.
+        min_by_species : dict
+            Minimum z-scores or ratios computed per species for orphans.
+    """
+    species_df, query_to_code = load_species_and_protein_codes(species_file, prot_interest_file)
+    common_species = gather_common_species(reference_groups, analyzed_groups)
+    merged_no_common = defaultdict(dict)
+    fusion_count = 0
 
     for query, ref_groups in common_species.items():
         print(f"\n▶ Protéine requête : {query}")
 
-        # Récupérer le code_proteine à partir du nom de la protéine (query)
         protein_code = query_to_code.get(query)
         print(protein_code)
         if not protein_code:
             print(f"  ⚠️  Aucun code_proteine trouvé pour {query}")
             continue
 
-        # Charger la séquence de la protéine requête à partir de son code_proteine
         query_seq = get_sequence_from_fasta(fasta_dir_query, protein_code)
 
         matching_group_ids = [
             gid for gid, info in analyzed_groups.items()
             if "queries" in info and query in info["queries"]
         ]
-        already_merged = set()
 
-        # Choisir méthode de tri
-        if sort_method == "species_count":
-            print("Tri par nombre d'espèces")
-            sorted_matching_groups = sorted(
-                matching_group_ids,
-                key=lambda gid: len(analyzed_groups[gid]["proteins"]),
-                reverse=True
-            )
-        elif sort_method == "similarity":
-            print("Tri par similarité de séquence")
-            similarity_scores = {
-                gid: compute_group_similarity_score(analyzed_groups[gid]["proteins"], query_seq, fasta_dir_species, species_df)
-                for gid in matching_group_ids  # Tri des groupes comparés (matching_group_ids)
-            }
-            # Tri
-            sorted_matching_groups = sorted(matching_group_ids, key=lambda gid: similarity_scores[gid], reverse=True)
-        else:
-            sorted_matching_groups = matching_group_ids
+        sorted_matching_groups = sort_groups(matching_group_ids, analyzed_groups, query_seq, fasta_dir_species, species_df, sort_method)
 
-        for ref_group_id, ref_species_set in ref_groups.items():
-            print(f"  🔬 Groupe de référence {ref_group_id} ({len(ref_species_set)} espèces) :")
+        merged_query_groups, fusion_count = merge_groups_for_query(query, ref_groups, analyzed_groups, sorted_matching_groups, fusion_count)
+        merged_no_common.update(merged_query_groups)
 
-            current_group_id = ref_group_id
-            current_proteins_by_group = defaultdict(list)
-            current_species = ref_species_set.copy()
-
-            for prot in analyzed_groups[ref_group_id]["proteins"]:
-                current_proteins_by_group[ref_group_id].append(prot)
-
-            for test_group_id in sorted_matching_groups:  # Parcours des groupes triés
-                if test_group_id == ref_group_id or test_group_id in already_merged:
-                    continue
-
-                test_info = analyzed_groups[test_group_id]
-                test_species_set = set(extract_species(p) for p in test_info["proteins"] if extract_species(p))
-                shared_species = current_species & test_species_set
-
-                print(f"    ↪ Comparé avec groupe {test_group_id} ({len(test_species_set)} espèces) :")
-                if shared_species:
-                    print(f"Espèces communes : {shared_species} → Pas de fusion")
-                    continue
-                else:
-                    print(f"Aucune espèce commune → Fusion")
-                    for prot in test_info["proteins"]:
-                        current_proteins_by_group[test_group_id].append(prot)
-
-                    current_species |= test_species_set
-                    already_merged.add(test_group_id)
-                    current_group_id = f"fusion_{fusion_count}"
-
-            if isinstance(current_group_id, str) and current_group_id.startswith("fusion_"):
-                fusion_count += 1
-
-            merged_no_common[query][current_group_id] = dict(current_proteins_by_group)
-
-        filtered_orphans = []
-        for query in proteins_in_no_group:
-            if query not in merged_no_common:
-                continue
-            for orphan in proteins_in_no_group[query]:
-                orphan_species = extract_species(orphan)
-
-                # Récupérer toutes les espèces déjà présentes dans les groupes de ce query
-                existing_species = {
-                    extract_species(p)
-                    for group in merged_no_common[query].values()
-                    for plist in group.values()
-                    for p in plist
-                }
-
-                if orphan_species not in existing_species:
-                    filtered_orphans.append((query, orphan))
-
-        print(f"Orphelins : {filtered_orphans}")
-
-        no_groups = []
-
-        for query in merged_no_common:
-            if query not in proteins_in_no_group:
-                continue
-
-            group_seqs_dict = {
-                p: get_seq_fasta(fasta_dir_species, p)
-                for group in merged_no_common[query].values()
-                for plist in group.values()
-                for p in plist
-            }
-
-            # Sélectionner les orphelins dont l'espèce n'est pas déjà représentée
-            orphans = [
-                orphan for orphan in proteins_in_no_group[query]
-                if extract_species(orphan) not in {
-                    extract_species(p)
-                    for group in merged_no_common[query].values()
-                    for plist in group.values()
-                    for p in plist
-                }
-            ]
-
-            # Séquences des orphelins sous forme de dict {id: seq}
-            orphan_seqs_dict = {
-                orphan: get_seq_fasta(fasta_dir_species, orphan)
-                for orphan in orphans
-            }
-
-            # Fusionner les deux dictionnaires
-            combined_seqs = {**group_seqs_dict, **orphan_seqs_dict}
-
-            output_tree = os.path.join(output_dir, "tree")
-            tree = build_tree(combined_seqs, output_tree)
-
-            '''
-            t = Tree(tree)
-            ts = TreeStyle()
-            ts.show_leaf_name = True
-            t.show(tree_style=ts)
-            '''
-            
-            phykit_cmd = f"phykit long_branch_score {tree} -v"
-            result = subprocess.run(phykit_cmd, shell=True, capture_output=True, text=True, check=True)
-
-
-            # Parser les résultats dans un dictionnaire {leaf_name: score}
-            long_branch_scores = {}
-            for line in result.stdout.strip().split('\n'):
-                parts = line.split()
-                if len(parts) == 2:
-                    name, score = parts
-                    long_branch_scores[name] = float(score)
-            
-            z_scores, min_by_species = compute_z_scores_and_ratios(long_branch_scores, orphans, species_df)
-
-            all_orphan_ids = list(orphan_seqs_dict.keys())
-            for orphan in all_orphan_ids:
-                no_groups.append(orphan)
-
-            merged_no_common[query][current_group_id]["orphans"] = no_groups
+    filter_orphans(proteins_in_no_group, merged_no_common)
+    merged_no_common, min_by_species = process_orphans_and_build_tree(merged_no_common, proteins_in_no_group, fasta_dir_species, species_df, output_dir)
 
     return merged_no_common, min_by_species
 
@@ -1123,7 +1295,7 @@ def sort_key(query_protein):
     method = parts[2] if len(parts) > 2 else ""
     return (protein_id, method)
 
-
+'''
 def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file, fasta_protein):
 
     output_orthogroup_file = os.path.join(output_dir, "orthogroups")
@@ -1225,8 +1397,7 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
                     prot_interest_file, output_results, "similarity"
                 )
 
-                '''orthogroup output'''
-                '''
+                orthogroup output
 
                 def load_fasta_mapping(particule_file):
                     """Charge le fichier CSV et associe chaque particule à un fichier FASTA."""
@@ -1356,8 +1527,7 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
                 group_sequences = extract_sequences_by_group(orthologs_orthofinder_group, fasta_dir, species_file)
                 write_fasta_for_groups(group_sequences, fasta_output_dir)
 
-                '''
-                '''fin test'''
+                fin test
 
                 output_file = os.path.join(output_results, f"final_groups/{nom_prot}_orthogroups.txt")
                 dir_fgroups = os.path.join(output_results, f"final_groups")
@@ -1381,7 +1551,7 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
                 presence_absence_df = generate_presence_absence_table(orthologs_sonic_group, orthologs_orthologer_group, orthologs_orthofinder_group, species_dict, renamed_orthogroups)
                 presence_combined_df = pd.concat([presence_absence_df, presence_absence_single_df], axis=0)
 
-                '''PB CSUI'''
+                PB CSUI
                 target_column = "Cystoisospora suis"
                 target_prefix = "Csui"
                 group_map = {}  # {protein_id: group_index}
@@ -1587,8 +1757,630 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
                     plt.savefig(output_path, dpi=300, bbox_inches='tight')
 
                     fig.subplots_adjust(left=0.01, right=0.97, top=0.99, bottom=0.15)
-                    #plt.show()
-                    #plt.close(fig)
+'''
+
+def load_all_orthogroups(output_orthogroup_file):
+    """
+    Load all orthogroup mappings from SonicParanoid, Orthologer, and OrthoFinder.
+
+    This function reads the orthogroup CSV files from each method and loads them 
+    as dictionaries mapping orthogroup IDs to sets of protein IDs.
+
+    Parameters
+    ----------
+    output_orthogroup_file : str
+        Path to the directory containing the three orthogroup result files.
+
+    Returns
+    -------
+    tuple of dict
+        Tuple containing dictionaries for SonicParanoid, Orthologer, and OrthoFinder.
+    """
+    return (
+        load_groups(os.path.join(output_orthogroup_file, "sonicParanoid.csv")),
+        load_groups(os.path.join(output_orthogroup_file, "orthologer.csv")),
+        load_groups(os.path.join(output_orthogroup_file, "orthofinder.csv"))
+    )
+
+
+def get_interest_fasta(protein, nom_prot, output_results, fasta_protein):
+    """
+    Retrieve or locate the FASTA file for the protein of interest.
+
+    This function fetches the protein sequence from NCBI if no local FASTA directory
+    is provided, or retrieves the path to an existing file.
+
+    Parameters
+    ----------
+    protein : str
+        Protein identifier (e.g., NCBI or UniProt ID).
+    nom_prot : str
+        Local name assigned to the protein.
+    output_results : str
+        Path to the output directory for results.
+    fasta_protein : str or None
+        Optional path to a directory containing pre-downloaded FASTA files.
+
+    Returns
+    -------
+    str
+        Path to the FASTA file of the protein of interest.
+    """
+    if fasta_protein is None:
+        fasta_interest_dir = os.path.join(output_results, f"{nom_prot}.fasta")
+        fetch_sequence_ncbi_single(protein, nom_prot, fasta_interest_dir)
+    else:
+        fasta_interest_dir = os.path.join(fasta_protein, f"{nom_prot}.fasta")
+    return fasta_interest_dir
+
+
+def run_and_parse_blast(espece, protein, nom_prot, fasta_interest_dir, db_fasta, output_results):
+    """
+    Run BLASTP for a protein against a database and parse the best hits.
+
+    This function executes BLASTP with the input FASTA and database, saves the result,
+    and parses the best matching proteins.
+
+    Parameters
+    ----------
+    espece : str
+        Species name or identifier used for output naming.
+    protein : str
+        Protein ID used to filter best hits.
+    nom_prot : str
+        Local name assigned to the protein.
+    fasta_interest_dir : str
+        Path to the protein FASTA file.
+    db_fasta : str
+        Path to the BLAST-formatted FASTA database.
+    output_results : str
+        Output directory to store BLAST results.
+
+    Returns
+    -------
+    dict
+        Dictionary with the protein name as key and best hits as values.
+    """
+    blast_output_dir = os.path.join(output_results, "blast_results")
+    os.makedirs(blast_output_dir, exist_ok=True)
+
+    blast_output = os.path.join(blast_output_dir, f"{espece}_blast.txt")
+    run_blastp(fasta_interest_dir, db_fasta, blast_output)
+    best_hits = parse_blast_results(blast_output)
+    return {nom_prot: {"best_hits": best_hits.get(protein, [])}}
+
+
+def choose_best_orthogroup_method(best_hits, sonic_dict, orthologer_dict, orthofinder_dict,
+                                  species_file, fasta_interest_dir, fasta_dir,
+                                  prot_interest_file, output_results):
+    """
+    Select the best orthogroup inference method and compute merged ortholog groups.
+
+    This function:
+    - Compares ortholog group sizes from each method (SonicParanoid, Orthologer, OrthoFinder).
+    - Uses the method with the smallest total group size as the reference.
+    - Merges ortholog groups from the other two methods.
+    - Removes duplicate groups and compares species representation.
+    - Computes final ortholog groups with interspecies comparisons.
+
+    Parameters
+    ----------
+    best_hits : dict
+        Dictionary of best protein hits from BLASTP.
+    sonic_dict : dict
+        Orthogroup mapping from SonicParanoid.
+    orthologer_dict : dict
+        Orthogroup mapping from Orthologer.
+    orthofinder_dict : dict
+        Orthogroup mapping from OrthoFinder.
+    species_file : str
+        Path to the file listing species information.
+    fasta_interest_dir : str
+        Path to the FASTA file of the protein of interest.
+    fasta_dir : str
+        Path to the directory containing all species' protein FASTA files.
+    prot_interest_file : str
+        Path to the protein interest metadata file.
+    output_results : str
+        Directory to store the output results.
+
+    Returns
+    -------
+    tuple
+        A tuple containing:
+        - new_groups: Final merged ortholog groups after filtering.
+        - ref_groups: Ortholog groups from the smallest method.
+        - max_z_by_species: Dictionary with maximum z-score similarity by species.
+    """
+    ortholog_sets = {}
+    sizes = {}
+
+    for method, method_dict in zip(["sonic", "orthologer", "orthofinder"],
+                                   [sonic_dict, orthologer_dict, orthofinder_dict]):
+        parsed = parse_hits_in_orthogroups(method_dict, best_hits)
+        group = retrieve_orthologous_proteins(method_dict, parsed)
+        ortholog_sets[method] = (parsed, group)
+        sizes[method] = sum(len(g) for g in group.values())
+
+    smallest_method = min(sizes, key=sizes.get)
+    other_methods = [m for m in ["sonic", "orthologer", "orthofinder"] if m != smallest_method]
+
+    merged_proteins_by_query = merge_orthologous_groups_by_protein(
+        ortholog_sets[other_methods[0]][0], ortholog_sets[other_methods[0]][1],
+        ortholog_sets[other_methods[1]][0], ortholog_sets[other_methods[1]][1]
+    )
+
+    final_merged_groups = remove_duplicate_groups(merged_proteins_by_query)
+
+    analysis_groups, no_group_proteins = analyze_orthologous_groups(
+        final_merged_groups,
+        eval(f"{smallest_method}_dict")
+    )
+
+    ref_groups = ortholog_sets[smallest_method][1]
+
+    new_groups, max_z_by_species = compare_species_between_groups(
+        ref_groups, analysis_groups, no_group_proteins,
+        species_file, fasta_interest_dir, fasta_dir,
+        prot_interest_file, output_results, "similarity"
+    )
+
+    return new_groups, ref_groups, max_z_by_species
+
+
+def save_final_groups(nom_prot, new_groups, output_results):
+    """
+    Save the final orthologous groups into a formatted text file.
+
+    This function:
+    - Creates a directory to store the final orthogroups if it doesn't already exist.
+    - Writes each orthogroup with its associated subclusters and sequences into a file.
+
+    Parameters
+    ----------
+    nom_prot : str
+        Name of the protein of interest.
+    new_groups : dict
+        Dictionary containing final orthologous group information, typically structured by group IDs, cluster IDs, and sequence lists.
+    output_results : str
+        Path to the main output directory.
+
+    Returns
+    -------
+    str
+        Path to the saved orthogroup file.
+    """
+    dir_fgroups = os.path.join(output_results, "final_groups")
+    os.makedirs(dir_fgroups, exist_ok=True)
+
+    output_file = os.path.join(dir_fgroups, f"{nom_prot}_orthogroups.txt")
+    with open(output_file, "w") as f:
+        for group, id_dict in new_groups.items():
+            f.write(f">{group}\n")
+            for cluster_id, subcluster in id_dict.items():
+                for sub_id, seq_list in subcluster.items():
+                    f.write(f">{sub_id}\n")
+                    f.write("\n".join(map(str, seq_list)) + "\n\n")
+    return output_file
+
+
+def build_presence_absence_tables(best_hits, new_groups, species_dict,
+                                  orthologs_ref, sonic_dict, orthologer_dict, orthofinder_dict,
+                                  prot_interest_file):
+    """
+    Construct presence/absence tables from orthologous group data.
+
+    This function:
+    - Loads protein mapping data.
+    - Generates a presence/absence table for the final (custom) orthogroups.
+    - Reconstructs orthologous groups using SonicParanoid, Orthologer, and OrthoFinder.
+    - Merges and renames orthogroups for unified presence/absence tracking.
+    - Combines all information into a final DataFrame.
+
+    Parameters
+    ----------
+    best_hits : dict
+        Dictionary mapping query proteins to their best BLAST hits.
+    new_groups : dict
+        Final orthologous groups constructed through custom logic.
+    species_dict : dict
+        Dictionary mapping species codes to full names or other identifiers.
+    orthologs_ref : dict
+        Reference ortholog group (smallest set) used for comparison.
+    sonic_dict : dict
+        Dictionary of orthogroups from SonicParanoid.
+    orthologer_dict : dict
+        Dictionary of orthogroups from Orthologer.
+    orthofinder_dict : dict
+        Dictionary of orthogroups from OrthoFinder.
+    prot_interest_file : str
+        Path to the file mapping protein identifiers to query names.
+
+    Returns
+    -------
+    pd.DataFrame
+        Combined presence/absence table for custom and tool-based orthogroups.
+    """
+    protein_mapping = load_protein_mapping(prot_interest_file)
+
+    presence_absence_single_df = generate_presence_absence_table_single_group(new_groups, species_dict)
+
+    ortholog_sonic = parse_hits_in_orthogroups(sonic_dict, best_hits)
+    orthologs_sonic_group = retrieve_orthologous_proteins(sonic_dict, ortholog_sonic)
+
+    ortholog_orthologer = parse_hits_in_orthogroups(orthologer_dict, best_hits)
+    orthologs_orthologer_group = retrieve_orthologous_proteins(orthologer_dict, ortholog_orthologer)
+
+    ortholog_orthofinder = parse_hits_in_orthogroups(orthofinder_dict, best_hits)
+    orthologs_orthofinder_group = retrieve_orthologous_proteins(orthofinder_dict, ortholog_orthofinder)
+
+    merged_orthogroups = merge_ortholog_groups(
+        ortholog_sonic, ortholog_orthofinder, ortholog_orthologer)
+
+    renamed_orthogroups = rename_keys(merged_orthogroups, protein_mapping)
+
+    presence_absence_df = generate_presence_absence_table(
+        orthologs_sonic_group, orthologs_orthologer_group, orthologs_orthofinder_group, species_dict, renamed_orthogroups
+    )
+
+    return pd.concat([presence_absence_df, presence_absence_single_df], axis=0)
+
+
+def analyze_fusion_groups(nom_prot, new_groups, presence_df, max_z_by_species):
+    """
+    Analyze fusion groups to detect species with putative gene fusion events.
+
+    This function:
+    - Identifies proteins belonging to fusion groups specific to the target species.
+    - Assigns a unique group index to each fusion group.
+    - Annotates the presence/absence table with fusion group values for the target species.
+    - Constructs a dictionary summarizing fusion group and z-score values by species.
+
+    Parameters
+    ----------
+    nom_prot : str
+        Name of the query protein used to identify fusion events.
+    new_groups : dict
+        Dictionary of orthologous groups including potential fusion group information.
+    presence_df : pd.DataFrame
+        DataFrame containing presence/absence data across species.
+    max_z_by_species : dict
+        Dictionary mapping species to their maximum Z-score similarity values.
+
+    Returns
+    -------
+    dict
+        Dictionary summarizing fusion group membership and similarity Z-scores per species.
+    """
+    target_prefix = "Csui"
+    target_column = "Cystoisospora suis"
+
+    group_names_ordered = []
+    group_map = {}
+    seen_group_names = set()
+
+    for group_data in new_groups.values():
+        if "fusion_0" in group_data:
+            for group_name in group_data["fusion_0"]:
+                if group_name not in seen_group_names:
+                    group_names_ordered.append(group_name)
+                    seen_group_names.add(group_name)
+
+    for outer_key, group_data in new_groups.items():
+        fusion_groups = group_data.get("fusion_0", {})
+        for group_name, group_content in fusion_groups.items():
+            group_index = group_names_ordered.index(group_name) + 1
+            if isinstance(group_content, dict):
+                for prot_list in group_content.values():
+                    for prot in prot_list:
+                        if prot.startswith(target_prefix):
+                            group_map[prot] = group_index
+            elif isinstance(group_content, list):
+                for prot in group_content:
+                    if prot.startswith(target_prefix):
+                        group_map[prot] = group_index
+
+    fusion_dict = {}
+    if group_map:
+        group_value = list(group_map.values())[0]
+        presence_df[target_column] = group_value
+
+        fusion_row = presence_df[presence_df["Query Protein"] == f"{nom_prot}_fusion"].iloc[0]
+        for species in presence_df.columns[1:]:
+            fusion_value = fusion_row[species]
+            z_score = max_z_by_species.get(species, None)
+            fusion_dict[species] = {
+                "fusion": fusion_value,
+                "z_score": z_score
+            }
+
+    return fusion_dict
+
+
+def plot_presence_absence_matrices(presence_df, busco_scores, tree, output_results, max_z_by_species):
+    """
+    Visualize presence/absence matrices of orthologous groups with phylogenetic tree and BUSCO scores.
+
+    This function:
+    - Sorts and structures a presence/absence matrix of proteins across species.
+    - Displays a phylogenetic tree, BUSCO completeness scores, and a heatmap of orthogroup memberships.
+    - Highlights fusion groups with custom color codes and annotates significant Z-score similarities.
+    - Saves per-protein visualizations in the output directory.
+
+    Parameters
+    ----------
+    presence_df : pd.DataFrame
+        DataFrame with presence/absence information per query protein and species.
+    busco_scores : dict
+        Dictionary mapping species names to their BUSCO completeness scores (int).
+    tree : ete3.Tree
+        Phylogenetic tree object representing species relationships.
+    output_results : str
+        Path to the directory where the resulting plots will be saved.
+    max_z_by_species : dict
+        Dictionary mapping species names to their maximum Z-score for fusion group similarity.
+
+    Returns
+    -------
+    tuple
+        A tuple containing:
+        - pd.DataFrame: DataFrame of BUSCO scores indexed by species.
+        - list: Ordered list of species names (leaf names from the tree).
+    """
+    # Sort presence/absence dataframe based on custom logic
+    sorted_df = presence_df.copy()
+    sorted_df["Query Protein"] = sorted_df["Query Protein"].astype(str)
+    sorted_df = sorted_df.sort_values(by="Query Protein", key=lambda x: x.map(sort_key))
+
+    sorted_columns = sorted(presence_df.columns[1:])
+    sorted_df = sorted_df[["Query Protein"] + sorted_columns]
+    df_numeric = sorted_df.set_index("Query Protein").astype(int)
+
+    # Clean leaf names from the tree
+    leaf_names = [leaf.name.replace("'", "").strip() for leaf in tree.iter_leaves()]
+    for leaf in tree.iter_leaves():
+        leaf.name = leaf.name.replace("'", "").strip()
+
+    df = df_numeric[leaf_names]
+    busco_df = pd.DataFrame({'Species': df.columns, 'BUSCO_score': [busco_scores.get(sp, None) for sp in df.columns]})
+    busco_df.set_index('Species', inplace=True)
+    busco_df = busco_df.astype(int)
+
+    methods = ["orthofinder", "orthologer", "sonic", "fusion"]
+    all_proteins = sorted({
+        "_".join(prot.split("_")[:-1])
+        for prot in df.index
+        if prot.count("_") >= 2 and prot.split("_")[-1] in methods
+    })
+
+    output_images_dir = os.path.join(output_results, "plot")
+    os.makedirs(output_images_dir, exist_ok=True)
+
+    for prot in all_proteins:
+        selected_rows = [f"{prot}_{method}" for method in methods]
+        df_subset = df.loc[df.index.intersection(selected_rows)]
+        df_subset = df_subset.reindex(selected_rows)
+
+        # Create the figure layout: tree + BUSCO + heatmap
+        fig, axes = plt.subplots(1, 3, figsize=(30, 20), gridspec_kw={'width_ratios': [1.3, 0.1, 1.8], 'wspace': 0.0001})
+
+        # Tree rendering style with thick black branches and aligned names
+        def master_ly(node):
+            if node.is_leaf():
+                F = faces.TextFace(node.name, fsize=150)
+                F.hz_align = 2
+                faces.add_face_to_node(F, node, column=1, position="aligned")
+
+            node.img_style["vt_line_width"] = 50
+            node.img_style["hz_line_width"] = 50
+            node.img_style["vt_line_color"] = "black"
+            node.img_style["hz_line_color"] = "black"
+
+        # Render tree to temporary file and load image into plot
+        temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tree_style = TreeStyle()
+        tree_style.show_leaf_name = False
+        tree_style.draw_guiding_lines = True
+        tree_style.guiding_lines_color = "black"
+        tree_style.guiding_lines_type = 0
+        tree_style.scale = 1000
+        tree_style.layout_fn = master_ly
+        tree.render(temp_file.name, w=2000, tree_style=tree_style)
+        img = plt.imread(temp_file.name)
+        axes[0].imshow(img)
+        axes[0].axis("off")
+
+        # Plot BUSCO scores
+        sns.heatmap(busco_df, cmap="RdYlGn", annot=True, fmt="d", cbar=False, ax=axes[1], linewidths=0.3, linecolor="black", annot_kws={'size': 8})
+        axes[1].set_yticklabels([])
+        axes[1].set_ylabel("")
+        axes[1].set_xticklabels(["BUSCO Score"], rotation=45)
+        axes[1].tick_params(axis='both', length=0)
+
+        max_group_id = df_subset.to_numpy().max()
+        if pd.isna(max_group_id) or max_group_id < 1:
+            max_group_id = 1
+
+        fixed_colors = {
+            0: "#FFFFFF", #Absence
+            1: "#228B22", # Reference group
+            'intermediate': sns.color_palette("husl", max(0, max_group_id - 2)),
+            max_group_id: "#e31a1c" # Orphans
+        }
+        
+        color_list = [fixed_colors[0], fixed_colors[1]] + fixed_colors['intermediate'] + [fixed_colors[max_group_id]]
+        custom_cmap = ListedColormap(color_list)
+
+        # Plot presence/absence heatmap
+        ax = sns.heatmap(df_subset.T, cmap=custom_cmap, linewidth=0.3,
+                        linecolor="black", cbar=True, xticklabels=True,
+                        yticklabels=True, annot=False, ax=axes[2], vmin=0, vmax=max_group_id, annot_kws={'size': 20})
+
+        # Annotate z-scores for fusion rows
+        for col_idx, leaf in enumerate(leaf_names):
+            if leaf not in max_z_by_species:
+                continue
+
+            z_score = max_z_by_species[leaf]
+            text_color = "white"
+            
+            if z_score <= 1:
+                n_stars = 0
+            elif 1 < z_score <= 2:
+                n_stars = 2
+            elif 2 < z_score <= 3:
+                n_stars = 5
+            else:  # z > 3
+                n_stars = 10
+
+            if n_stars > 0:
+                stars = "★" * n_stars
+                s = f"{stars} {z_score:.2f} {stars}"
+            else:
+                s = f"{z_score:.2f}"
+
+            axes[2].text(
+                y=col_idx + 0.5,
+                x=df_subset.index.get_loc(f"{prot}_fusion") + 0.5,
+                s=s,
+                ha='center',
+                va='center',
+                fontsize=6,
+                color=text_color,
+                fontweight='bold'
+            )
+
+        axes[2].set_xlabel("Request protein")
+        axes[2].tick_params(axis="x", labelrotation=45)
+        axes[2].set_yticklabels([])
+        axes[2].set_yticks([])
+
+        colorbar = ax.collections[0].colorbar
+        ticks = list(range(0, max_group_id + 1))
+        ticklabels = []
+
+        for i in ticks:
+            if i == 0:
+                ticklabels.append("Absence")
+            elif i == 1:
+                ticklabels.append("Reference group")
+            elif i == max_group_id:
+                ticklabels.append("Orphans")
+            else:
+                ticklabels.append(f"Group {i - 1}")
+
+        colorbar.set_ticks(ticks)
+        colorbar.set_ticklabels(ticklabels)
+
+        # Save figure
+        output_path = os.path.join(output_images_dir, f"{prot}.png")
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+
+        fig.subplots_adjust(left=0.01, right=0.97, top=0.99, bottom=0.15)
+
+        return busco_df, leaf_names
+
+    
+def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file, fasta_protein):
+    """
+        Execute a comprehensive analysis pipeline for orthogroups and gene fusion detection
+        across multiple species, integrating phylogenetic context and BUSCO completeness scores.
+
+        This function performs the following major steps:
+        - Loads input data: species tree, protein of interest, species mappings, BUSCO scores,
+        and orthogroup assignments from various methods.
+        - Iterates over species and proteins of interest to:
+            * Extract relevant FASTA sequences.
+            * Run BLAST searches and parse results.
+            * Select the best orthogroup assignment by integrating multiple orthology methods.
+            * Build presence/absence tables combining all orthogroup data.
+            * Analyze putative gene fusion events.
+            * Plot presence/absence matrices alongside BUSCO completeness scores on the species tree.
+        - Aggregates fusion and similarity (z-score) data across all proteins and species.
+        - Generates a multi-panel figure showing:
+            * The species phylogenetic tree.
+            * BUSCO scores per species.
+            * Heatmaps and symbolic representations of fusion and similarity patterns,
+            including detailed annotations for fusion groups and confidence (z-scores).
+        - Saves the final figure in the specified output directory.
+
+        Parameters
+        ----------
+        fasta_dir : str
+            Directory containing FASTA files for each species.
+        output_dir : str
+            Directory where output files and plots will be saved.
+        tree_file : str
+            File path to the species phylogenetic tree in Newick format.
+        prot_interest_file : str
+            File containing the proteins of interest organized by species.
+        species_file : str
+            File containing species mapping and BUSCO score information.
+        fasta_protein : str
+            Path to the master FASTA file containing protein sequences of interest.
+
+        Returns
+        -------
+        None
+            Outputs results and plots directly to the output directory.
+    """
+    output_orthogroup_file = os.path.join(output_dir, "orthogroups")
+    tree = Tree(tree_file, format=1)
+
+    # Load proteins of interest per species
+    proteins_dict = read_protein_interest(prot_interest_file)
+    # Load species name mapping
+    species_dict = load_species_mapping(species_file)
+    # Load BUSCO completeness scores for species
+    busco_scores = get_busco_scores(species_file)
+
+    # Load orthogroup assignments from different methods
+    sonic_dict, orthologer_dict, orthofinder_dict = load_all_orthogroups(output_orthogroup_file)
+
+    dict_esp_fusion = {}
+
+    # Iterate over proteins of interest
+    for espece, proteins in proteins_dict.items():
+        db_fasta = os.path.join(fasta_dir, f"{espece}.fasta")
+        for protein, nom_prot in proteins.items():
+            output_results = os.path.join(output_dir, nom_prot)
+            os.makedirs(output_results, exist_ok=True)
+
+            # Extract fasta sequences related to protein of interest
+            fasta_interest_dir = get_interest_fasta(protein, nom_prot, output_results, fasta_protein)
+
+            if not os.path.exists(fasta_interest_dir) or not os.path.exists(db_fasta):
+                continue
+
+            # Run BLAST and parse best hits results
+            best_hits = run_and_parse_blast(espece, protein, nom_prot, fasta_interest_dir, db_fasta, output_results)
+
+            # Choose best orthogroup assignment combining multiple orthology methods
+            final_merged_groups, ref_groups, max_z_by_species = choose_best_orthogroup_method(
+                best_hits, sonic_dict, orthologer_dict, orthofinder_dict,
+                species_file, fasta_interest_dir, fasta_dir,
+                prot_interest_file, output_results
+            )
+
+            # Save final orthogroup assignments to file
+            output_file = save_final_groups(nom_prot, final_merged_groups, output_results)
+
+            # Build presence/absence matrices combining data from orthogroups and species info
+            presence_combined_df = build_presence_absence_tables(
+                best_hits, final_merged_groups, species_dict,
+                ref_groups, sonic_dict, orthologer_dict, orthofinder_dict,
+                prot_interest_file
+            )
+
+            # Analyze gene fusion groups and detect fusion events
+            dict_esp_fusion[nom_prot] = analyze_fusion_groups(
+                nom_prot, final_merged_groups, presence_combined_df, max_z_by_species
+            )
+
+            # Plot presence/absence matrices with BUSCO completeness on the species tree
+            busco_df, leaf_names = plot_presence_absence_matrices(
+                presence_combined_df, busco_scores, tree, output_results, max_z_by_species
+            )
 
     zscore_df = pd.DataFrame({
         protein: {
@@ -1612,6 +2404,7 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
     n_cols = len(zscore_df.columns)
     n_rows = len(zscore_df.index)
 
+    # Setup matplotlib figure with 3 panels: tree, BUSCO heatmap, fusion/zscore heatmap
     fig_final, axes_final = plt.subplots(
         1, 3,
         figsize=(22, 30),
@@ -1624,11 +2417,12 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
             F.hz_align = 2
             faces.add_face_to_node(F, node, column=1, position="aligned")
 
-        node.img_style["vt_line_width"] = 30  # Épaisseur de la branche verticale
-        node.img_style["hz_line_width"] = 30  # Épaisseur de la branche horizontale
+        node.img_style["vt_line_width"] = 30
+        node.img_style["hz_line_width"] = 30
         node.img_style["vt_line_color"] = "black"
         node.img_style["hz_line_color"] = "black"
 
+    # Render tree to temporary file and load image into plot
     temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
     tree_style = TreeStyle()
     tree_style.show_leaf_name = False
@@ -1637,13 +2431,13 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
     tree_style.guiding_lines_type = 0
     tree_style.scale = 1000
     tree_style.layout_fn = master_ly
-    #tree.render(temp_file.name, w=400, h =800, tree_style=tree_style)
     tree.render(temp_file.name, w=2000, dpi=600, tree_style=tree_style)
     img = Image.open(temp_file.name)
     img = img.crop(img.getbbox())
     axes_final[0].imshow(img)
     axes_final[0].axis("off")
 
+    # plot BUSCO scores
     sns.heatmap(busco_df, cmap="RdYlGn", annot=True, fmt="d", cbar=False, ax=axes_final[1], linewidths=0.3, linecolor="black", annot_kws={'size': 10})
     axes_final[1].set_xticks([0])
     axes_final[1].set_yticklabels([])
@@ -1651,6 +2445,7 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
     axes_final[1].set_xticklabels(["BUSCO Score"], rotation=45)
     axes_final[1].tick_params(axis='both', length=0)
 
+    # Configure the third subplot for fusion and z-score visualization
     n_rows, n_cols = zscore_df.shape
     axes_final[2].set_xlim(0, n_cols)
     axes_final[2].set_ylim(0, n_rows)
@@ -1662,14 +2457,11 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
     box = axes_final[2].get_position()
     axes_final[2].set_position([box.x0, box.y0, box.width, box.height])
 
-    # Couleurs de fond
     axes_final[2].set_facecolor('white')
-
     list_max_group = []
 
-    # Ajouter des formes selon les z-scores
+    # Loop over species (columns) to draw fusion and z-score markers
     for j, species in enumerate(zscore_df.columns):
-
         fusion_values = [
             dict_esp_fusion.get(species, {}).get(protein, {}).get("fusion", 0)
             for protein in zscore_df.index
@@ -1679,19 +2471,19 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
 
         intermediate_ids = list(range(2, max_group_id))
         fixed_colors = {
-            0: "#FFFFFF",
-            1: "#228B22",
-            "intermediate": sns.color_palette("husl", len(intermediate_ids)),
-            max_group_id: "#e31a1c"
+            0: "#FFFFFF",            # Absence: white
+            1: "#228B22",            # Reference group: green
+            "intermediate": sns.color_palette("husl", len(intermediate_ids)),  # Intermediate groups
+            max_group_id: "#e31a1c"  # Orphans: red
         }
 
+        # Loop over proteins (rows) to add circles and wedges indicating fusion and similarity
         for i, protein in enumerate(zscore_df.index):
             info = dict_esp_fusion.get(species, {}).get(protein, {})
             fusion = info.get("fusion", 0)
             z = info.get("z_score", None)
             center = (j + 0.5, n_rows - i - 0.5)
 
-            # 3. Couleur de bordure selon fusion
             if fusion == 0:
                 edge_color = fixed_colors[0]
             elif fusion == 1:
@@ -1703,42 +2495,41 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
                     idx = intermediate_ids.index(fusion)
                     edge_color = fixed_colors["intermediate"][idx]
                 except ValueError:
-                    edge_color = "#000000"  # fallback noir si problème
+                    edge_color = "#000000"  # fallback in black if error
 
+            # Draw circle/wedge depending on z-score thresholds
             if pd.isna(z):
-                # Rond blanc vide
+                # White circle
                 circle = Circle(center, 0.3, facecolor='none', edgecolor='black')
                 axes_final[2].add_patch(circle)
 
             elif z < 2:
-                # Rond noir plein
+                # Full circle
                 circle = Circle(center, 0.3, facecolor=edge_color, edgecolor=edge_color)
                 axes_final[2].add_patch(circle)
 
             elif 2 <= z < 3:
-                # Cercle vide avec bordure
+                # Half circle
                 circle = Circle(center, 0.3, edgecolor=edge_color, facecolor='none', linewidth=1)
                 axes_final[2].add_patch(circle)
 
-                # Remplissage supérieur avec un wedge noir
                 wedge = Wedge(center, 0.3, 270, 90, facecolor=edge_color, edgecolor='none')
                 axes_final[2].add_patch(wedge)
 
             elif z >= 3:
-                # Quart de cercle (haut gauche rempli)
+                # Quarter circle
                 circle = Circle(center, 0.3, edgecolor=edge_color, facecolor='none', linewidth=1)
                 axes_final[2].add_patch(circle)
 
                 wedge = Wedge(center, 0.3, 0, 90, facecolor=edge_color, edgecolor='none')
                 axes_final[2].add_patch(wedge)
 
-    # Quadrillage
     for x in range(n_cols + 1):
         axes_final[2].axvline(x, color='black', lw=0.5)
     for y in range(n_rows + 1):
         axes_final[2].axhline(y, color='black', lw=0.5)
 
-    axes_final[2].set_aspect('equal')  # Assure des cases carrées
+    axes_final[2].set_aspect('equal')  # square cases
     
     axes_final[2].set_yticks([])
     axes_final[2].tick_params(which="minor", length=0)
@@ -1747,23 +2538,20 @@ def run_table(fasta_dir, output_dir, tree_file, prot_interest_file, species_file
     global_max_group_id = max(list_max_group)
     intermediate_ids = list(range(2, global_max_group_id))
 
-    # Palette cohérente avec le nombre de groupes intermédiaires
     palette_inter = sns.color_palette("husl", len(intermediate_ids))
 
-    # Créer la légende
     legend_elements = [
         Patch(facecolor="#FFFFFF", edgecolor='black', label="Absence"),
         Patch(facecolor="#228B22", edgecolor='black', label="Reference group"),
     ]
 
-    # Ajouter les groupes intermédiaires
     for idx, color in enumerate(palette_inter):
         legend_elements.append(Patch(facecolor=color, edgecolor='black', label=f"Group {idx + 1}"))
 
-    # Groupe maximal (No_group)
+    # Orphans
     legend_elements.append(Patch(facecolor="#e31a1c", edgecolor='black', label="Orphans"))
 
-    # Ajouter la légende à axes_final[2]
+    # Add legend
     axes_final[2].legend(
         handles=legend_elements,
         loc='center left',
