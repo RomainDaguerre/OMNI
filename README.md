@@ -19,7 +19,7 @@
 ## Requirements
 
 - Python 3.8+ 
-- EMBOSS (https://emboss.sourceforge.net/)
+- [EMBOSS](https://emboss.sourceforge.net/)
 - [BUSCO](https://busco.ezlab.org/)
 - [SonicParanoid](https://github.com/fenderglass/SonicParanoid)
 - [OrthoFinder](https://github.com/davidemms/OrthoFinder)
