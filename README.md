@@ -8,12 +8,12 @@
 
 ```
 .
-├── Fasta/                           # Raw FASTA files used in the analysis
-├── Output/                          # Output files from orthogroup and phylogeny analyses
-├── fasta_protein/                   # Protein sequences in FASTA format
-├── particule_species_Busco.csv      # BUSCO results for different species
+├── Fasta/                           # Raw FASTA files of proteomes from different species
+├── Output/                          # Output files from orthogroup
+├── fasta_protein/                   # Request proteins sequences in FASTA format
+├── particule_species_Busco.csv      # Species data
 ├── phylogenie_apicomplexa.nwk       # Phylogenetic tree in Newick format
-├── prot_test.csv                    # Protein test data
+├── protein.csv                      # Request proteins data
 ```
 
 ## Requirements
