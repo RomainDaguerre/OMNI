@@ -51,16 +51,30 @@ python3 main.py \
 
 ---
 
-### 2. 🧠 Outil OMNI (Ontology-based Metabolic Network Integration)
+## 2. 🧠 OMNI Tool (Ontology-based Metabolic Network Integration)
 
-Cet outil permet l’annotation fonctionnelle des protéines sur la base de règles ontologiques (non inclus dans ce dépôt mais intégré dans le projet global).
+This tool serves as a command-line interface for analyzing orthologous protein groups across species using precomputed FASTA files and orthology inference results :
+
+- Merging and comparing orthologous groups across multiple inference tools.
+- Dynamically selecting the most compact reference group for species comparison.
+- Evaluating the consistency of orthology predictions between tools.
+- Optionally integrating a phylogenetic tree for enhanced analysis.
 
 ```bash
-python3 OMNI/omni.py \
-    --input prot_test.csv \
-    --rules rules.json \
-    --output ./omni_output
+python3 main.py \
+    -fd ./Fasta \
+    -o ./Output \
+    -i ./interest_proteins.csv \
+    -s ./particule_species_Busco.csv \
+    -t ./tree.nwk \
+    -pf ./combined_protein.fasta
 ```
+
+**Additional options :**
+| Option | Description |
+|--------|-------------|
+| `-t`   | Path to a phylogenetic tree in Newick format |
+| `-pf`   | Path to a combined FASTA file with all protein sequences |
 
 ---
 
