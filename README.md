@@ -28,6 +28,42 @@
 
 ---
 
+## Usage
+
+### 1. Orthogroups Processing Pipeline
+
+This pipeline translates sequences, cleans headers, runs BUSCO, and infers orthogroups using multiple tools.
+
+```bash
+python3 main.py \
+    -fd ./Fasta \
+    -db /path/to/busco_db \
+    -o ./Output \
+    -s particule_species_Busco.csv
+```
+
+**Additional options :**
+| Option | Description |
+|--------|-------------|
+| `-t`   | If proteome type not defined |
+| `-b`   | Skip BUSCO analysis |
+| `-ortho` | Skip ortholog inference and analysis |
+
+---
+
+### 2. 🧠 Outil OMNI (Ontology-based Metabolic Network Integration)
+
+Cet outil permet l’annotation fonctionnelle des protéines sur la base de règles ontologiques (non inclus dans ce dépôt mais intégré dans le projet global).
+
+```bash
+python3 OMNI/omni.py \
+    --input prot_test.csv \
+    --rules rules.json \
+    --output ./omni_output
+```
+
+---
+
 ## Author
 
 **Romain Daguerre**
