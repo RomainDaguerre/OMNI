@@ -19,16 +19,16 @@
 ## Requirements
 
 - Python 3.8+ 
-- EMBOSS (transeq dans le `$PATH`)
+- EMBOSS (https://emboss.sourceforge.net/)
 - [BUSCO](https://busco.ezlab.org/)
 - [SonicParanoid](https://github.com/fenderglass/SonicParanoid)
 - [OrthoFinder](https://github.com/davidemms/OrthoFinder)
-- Orthologer
+- [Orthologer](https://github.com/drostlab/orthologr)
 - `pandas`, `argparse`, `os`, `glob`, `shutil`, etc.
 
 ---
 
-## 👤 Author
+## Author
 
 **Romain Daguerre**
 UMR 7245 - CNRS MNHM - Parasites et Protistes Libres
@@ -36,3 +36,8 @@ Master Bioinformatique — Université Paris Cité
 
 
 ---
+
+## Contact
+
+For any questions, suggestions, or contributions :  
+📧 romain.daguerre1119 [at] gmail.com
