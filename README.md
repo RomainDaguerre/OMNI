@@ -1,5 +1,8 @@
 # OMNI (Orthologous group Merger for Numerous Inference tools)
 
+<p align="center">
+  <img alt="Made with Python" src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg?color=%23539fc9">
+</p>
 
 ## Repository Structure
 
@@ -15,7 +18,7 @@
 
 ## Requirements
 
-- Python 3.8+ <p align="left"><img alt="Made with Python" src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg?color=%23539fc9"></p>
+- Python 3.8+ 
 - EMBOSS (transeq dans le `$PATH`)
 - [BUSCO](https://busco.ezlab.org/)
 - [SonicParanoid](https://github.com/fenderglass/SonicParanoid)
